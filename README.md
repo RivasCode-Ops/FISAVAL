@@ -1,6 +1,8 @@
-# E-FISCAL
+# FISAVAL (E-FISCAL)
 
 Sistema de fiscalização de campo para secretarias de finanças e cadastro imobiliário — demanda, ordens de serviço, vistorias (PWA offline), roteirização e painéis de gestão.
+
+**Repositório:** [github.com/RivasCode-Ops/FISAVAL](https://github.com/RivasCode-Ops/FISAVAL)
 
 ## Demo online (piloto — sem programar servidor)
 
@@ -10,7 +12,7 @@ Sistema de fiscalização de campo para secretarias de finanças e cadastro imob
 | Publicar grátis | [docs/DEPLOY.md](docs/DEPLOY.md) — GitHub Pages, pasta `/docs`, **sem npm** |
 | Script rápido | `.\scripts\publicar-demo.ps1` (requer `gh auth login`) |
 
-URL após publicar: `https://rivascode-ops.github.io/e-fiscal/`
+URL após publicar: `https://rivascode-ops.github.io/FISAVAL/`
 
 ---
 

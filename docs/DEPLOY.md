@@ -18,20 +18,20 @@ Se ainda não tiver `gh` logado: `gh auth login`
 Criar repo e enviar (ajuste o nome se quiser):
 
 ```powershell
-gh repo create RivasCode-Ops/e-fiscal --public --source=. --remote=origin --push
+gh repo create RivasCode-Ops/FISAVAL --public --source=. --remote=origin --push
 ```
 
-Ou crie o repositório **e-fiscal** manualmente no site do GitHub e depois:
+O repositório [RivasCode-Ops/FISAVAL](https://github.com/RivasCode-Ops/FISAVAL) já existe (vazio). Só envie o código:
 
 ```powershell
-git remote add origin https://github.com/RivasCode-Ops/e-fiscal.git
+git remote add origin https://github.com/RivasCode-Ops/FISAVAL.git
 git branch -M main
 git push -u origin main
 ```
 
 ## Passo 2 — Ativar Pages (uma vez)
 
-1. Abra **https://github.com/RivasCode-Ops/e-fiscal** (ou seu usuário/repo).
+1. Abra **https://github.com/RivasCode-Ops/FISAVAL**.
 2. **Settings** → **Pages**
 3. **Build and deployment** → Source: **Deploy from a branch**
 4. Branch: **main** → Folder: **/docs** → **Save**
@@ -41,10 +41,8 @@ Em 1–3 minutos o site fica no ar.
 ## URL do demo
 
 ```
-https://rivascode-ops.github.io/e-fiscal/
+https://rivascode-ops.github.io/FISAVAL/
 ```
-
-(Se o repo tiver outro nome, troque `e-fiscal` pelo nome do repositório.)
 
 ## Testar no celular
 
