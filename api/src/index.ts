@@ -46,6 +46,7 @@ app.get('/api/fisaval/config', tenantMiddleware, (_req, res) => {
     multiTenant: config.multiTenant,
     assinaturaModos: listAssinaturaModos(),
     assinaturaPadrao: assinaturaPadrao(),
+    alertaPrazoMin: config.alertaPrazoMin,
   });
 });
 

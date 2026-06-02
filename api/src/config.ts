@@ -32,6 +32,8 @@ export const config = {
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean),
+  /** Mínimo de OS com prazo vencido para destacar tenant em alerta (super-admin). */
+  alertaPrazoMin: Math.max(1, Number(process.env.ALERTA_PRAZO_MIN) || 1),
 };
 
 export const usePostgres = () => !!config.databaseUrl;

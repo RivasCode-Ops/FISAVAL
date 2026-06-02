@@ -17,6 +17,8 @@ import { labelTiposHabilitados, TIPOS_VISTORIA } from '@/lib/tipoVistoria';
 import {
   CHECKLIST_ITEMS,
   getKpis,
+  listAlertasPrazoVencido,
+  type OrdemPrazoAlerta,
   getAssinaturaDisplayUrl,
   getVistoriaForOs,
   getVistoriaMapByOs,
@@ -58,6 +60,7 @@ export function PainelPage() {
   const [assinaturaUrls, setAssinaturaUrls] = useState<Record<string, string>>({});
   const [rotaFiscalId, setRotaFiscalId] = useState('');
   const [rotaGestorMsg, setRotaGestorMsg] = useState('');
+  const [alertasPrazo, setAlertasPrazo] = useState<OrdemPrazoAlerta[]>([]);
   const online = useOnline();
 
   const reload = useCallback(async () => {
@@ -77,6 +80,7 @@ export function PainelPage() {
     });
     const all = await listAllOrdens();
     setOrdens(all);
+    setAlertasPrazo(await listAlertasPrazoVencido());
     const queue = all.filter((o) => o.status === 'homologacao');
     setHomologQueue(queue);
     const vs: Record<string, Vistoria> = {};
@@ -165,6 +169,52 @@ export function PainelPage() {
 
   return (
     <>
+      {alertasPrazo.length > 0 && (
+        <div
+          className="card"
+          style={{
+            marginBottom: '1rem',
+            borderColor: 'var(--danger, #c44)',
+            background: 'rgba(200, 60, 60, 0.06)',
+          }}
+        >
+          <h2 style={{ margin: '0 0 0.5rem', fontSize: '1rem', color: 'var(--danger, #c44)' }}>
+            OS com prazo vencido ({alertasPrazo.length})
+          </h2>
+          <table style={{ fontSize: '0.85rem' }}>
+            <thead>
+              <tr>
+                <th>OS</th>
+                <th>Fiscal</th>
+                <th>Endereço</th>
+                <th>Prazo</th>
+                <th>Atraso</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alertasPrazo.map((o) => (
+                <tr
+                  key={o.id}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setDestaqueId(o.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && setDestaqueId(o.id)}
+                  tabIndex={0}
+                >
+                  <td>{o.id}</td>
+                  <td>{o.fiscalNome}</td>
+                  <td>{o.endereco}</td>
+                  <td>{o.prazo}</td>
+                  <td>{o.diasAtraso} dia(s)</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+            Clique na linha para destacar no mapa.
+          </p>
+        </div>
+      )}
+
       <div className="kpi-grid">
         <div className="kpi">
           <strong>{kpis.osHoje}</strong>OS (ref.)

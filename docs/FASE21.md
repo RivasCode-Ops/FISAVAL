@@ -44,5 +44,5 @@ PostgreSQL: colunas `assinatura_modo`, `assinatura_ref` em `vistorias`.
 ## Próximo
 
 - Integração real ICP-Brasil (API do provedor) e gov.br OAuth
-- Alertas cross-tenant (e-mail/push quando prazo vencido > limiar)
+- Alertas de prazo vencido — ver [FASE22.md](FASE22.md)
 - Seed PostgreSQL por tenant na primeira visita

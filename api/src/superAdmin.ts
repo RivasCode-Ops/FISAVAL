@@ -1,4 +1,6 @@
 import { config } from './config.js';
+
+export { aggregateAlertasPrazoCrossTenant } from './alertasPrazo.js';
 import { getRepo } from './repo.js';
 import { ensureTenantReady, runWithTenant } from './tenantContext.js';
 import { listTenants } from './tenantRegistry.js';
@@ -18,6 +20,7 @@ export type TenantOverviewRow = {
   visitasHoje: number;
   prazoVencido: number;
   fiscaisAtivos: number;
+  emAlerta: boolean;
 };
 
 export async function aggregateTenantsOverview(): Promise<{
@@ -38,6 +41,7 @@ export async function aggregateTenantsOverview(): Promise<{
       visitasHoje: kpis.visitasHoje ?? 0,
       prazoVencido: kpis.prazoVencido ?? 0,
       fiscaisAtivos: kpis.fiscais?.length ?? 0,
+      emAlerta: (kpis.prazoVencido ?? 0) >= config.alertaPrazoMin,
     });
   }
   return { tenants: rows, generatedAt: new Date().toISOString() };

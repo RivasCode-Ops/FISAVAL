@@ -46,7 +46,10 @@ import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
 import { vistoriaTemAssinatura } from '@/lib/vistoriaAssinatura';
 import { buildFiscalCargaLocal, pickFiscalIdLocal } from '@/lib/sugerirFiscal';
+import { ordensComPrazoVencidoLocal, type OrdemPrazoAlerta } from '@/lib/alertasPrazo';
 import { fiscalHandlesTipo } from '@/lib/tipoVistoria';
+
+export type { OrdemPrazoAlerta };
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from '@/types';
 
 const now = () => new Date().toISOString();
@@ -572,6 +575,18 @@ export async function getKpis() {
     prazoVencido: prazoVencidoCount,
     fiscais,
   };
+}
+
+export async function listAlertasPrazoVencido(): Promise<OrdemPrazoAlerta[]> {
+  if (isApiMode() && navigator.onLine) {
+    try {
+      const r = await apiClient.alertasPrazoVencido();
+      return r.ordens;
+    } catch {
+      /* Dexie */
+    }
+  }
+  return ordensComPrazoVencidoLocal(await listAllOrdens());
 }
 
 export async function sugerirFiscalParaTipo(tipo: string): Promise<string | null> {

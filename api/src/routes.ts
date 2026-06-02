@@ -508,6 +508,29 @@ export function createRoutes(): Router {
     }),
   );
 
+  router.get(
+    '/super/alertas/prazo-vencido',
+    requireSuperAdmin(),
+    asyncHandler(async (_req, res) => {
+      const { aggregateAlertasPrazoCrossTenant } = await import('./alertasPrazo.js');
+      res.json(await aggregateAlertasPrazoCrossTenant());
+    }),
+  );
+
+  router.get(
+    '/alertas/prazo-vencido',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (_req, res) => {
+      const { listarPrazoVencidoNoTenant } = await import('./alertasPrazo.js');
+      const ordens = await listarPrazoVencidoNoTenant();
+      res.json({
+        count: ordens.length,
+        ordens,
+        generatedAt: new Date().toISOString(),
+      });
+    }),
+  );
+
   router.patch(
     '/fiscais/:id/tipos-habilitados',
     requireRoles('gestor', 'admin'),

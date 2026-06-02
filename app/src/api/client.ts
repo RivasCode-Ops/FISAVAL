@@ -198,8 +198,46 @@ export const apiClient = {
         visitasHoje: number;
         prazoVencido: number;
         fiscaisAtivos: number;
+        emAlerta?: boolean;
       }[];
     }>('/super/overview'),
+  superAlertasPrazo: () =>
+    api<{
+      limiar: number;
+      total: number;
+      tenantsEmAlerta: number;
+      generatedAt: string;
+      tenants: {
+        tenantId: string;
+        municipio: string;
+        count: number;
+        ordens: {
+          id: string;
+          fiscalNome: string;
+          endereco: string;
+          bairro: string;
+          tipo?: string;
+          prazo: string;
+          diasAtraso: number;
+          status: string;
+        }[];
+      }[];
+    }>('/super/alertas/prazo-vencido'),
+  alertasPrazoVencido: () =>
+    api<{
+      count: number;
+      generatedAt: string;
+      ordens: {
+        id: string;
+        fiscalNome: string;
+        endereco: string;
+        bairro: string;
+        tipo?: string;
+        prazo: string;
+        diasAtraso: number;
+        status: string;
+      }[];
+    }>('/alertas/prazo-vencido'),
   getKpis: () =>
     api<{
       osHoje: number;
