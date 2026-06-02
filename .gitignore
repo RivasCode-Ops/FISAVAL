@@ -7,3 +7,4 @@ node_modules/
 app/dist/
 api/dist/
 api/data/
+!api/data/.gitkeep

@@ -1,8 +1,20 @@
+import { apiClient, apiPushState } from '@/api/client';
+import { isApiMode } from '@/api/config';
 import { db } from '@/db/database';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria } from '@/types';
 
 const now = () => new Date().toISOString();
 const uid = (p: string) => `${p}-${Date.now().toString(36)}`;
+
+async function pushApi() {
+  if (isApiMode() && navigator.onLine) {
+    try {
+      await apiPushState();
+    } catch {
+      /* mantém cópia local */
+    }
+  }
+}
 
 export const CHECKLIST_ITEMS = [
   { id: 'uso', label: 'Uso conforme cadastro' },
@@ -26,28 +38,41 @@ export async function createDemanda(input: {
   lat?: number;
   lng?: number;
 }) {
-  const d: Demanda = {
-    id: uid('D'),
-    tipo: input.tipo,
-    bairro: input.bairro,
-    prioridade: input.prioridade,
-    prazo: input.prazo,
-    status: 'aberta',
-    endereco: input.endereco,
-    inscricao: input.inscricao,
-    lat: input.lat ?? -23.55,
-    lng: input.lng ?? -46.633,
-    createdAt: now(),
-    updatedAt: now(),
-  };
-  await db.demandas.add(d);
+  let d: Demanda;
+  if (isApiMode() && navigator.onLine) {
+    d = await apiClient.createDemanda(input);
+    await db.demandas.put(d);
+  } else {
+    d = {
+      id: uid('D'),
+      tipo: input.tipo,
+      bairro: input.bairro,
+      prioridade: input.prioridade,
+      prazo: input.prazo,
+      status: 'aberta',
+      endereco: input.endereco,
+      inscricao: input.inscricao,
+      lat: input.lat ?? -23.55,
+      lng: input.lng ?? -46.633,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    await db.demandas.add(d);
+    await pushApi();
+  }
   return d;
 }
 
 export async function gerarOs(demandaId: string, fiscalId: string, fiscalNome: string) {
+  if (isApiMode() && navigator.onLine) {
+    const os = await apiClient.gerarOs(demandaId, fiscalId, fiscalNome);
+    await db.ordens.put(os);
+    const demanda = await db.demandas.get(demandaId);
+    if (demanda) await db.demandas.put({ ...demanda, status: 'os_gerada', updatedAt: now() });
+    return os;
+  }
   const demanda = await db.demandas.get(demandaId);
   if (!demanda) throw new Error('Demanda não encontrada');
-
   const count = await db.ordens.where('fiscalId').equals(fiscalId).count();
   const os: OrdemServico = {
     id: uid('OS'),
@@ -68,6 +93,7 @@ export async function gerarOs(demandaId: string, fiscalId: string, fiscalNome: s
     await db.ordens.add(os);
     await db.demandas.update(demandaId, { status: 'os_gerada', updatedAt: now() });
   });
+  await pushApi();
   return os;
 }
 
@@ -81,12 +107,24 @@ export async function listAllOrdens() {
 }
 
 export async function updateOsStatus(osId: string, status: OsStatus) {
+  if (isApiMode() && navigator.onLine) {
+    const os = await apiClient.patchOrdem(osId, status);
+    if (os) await db.ordens.put(os);
+    return;
+  }
   await db.ordens.update(osId, { status, updatedAt: now() });
+  await pushApi();
 }
 
 export async function getOrCreateVistoria(osId: string): Promise<Vistoria> {
   const existing = await db.vistorias.where('osId').equals(osId).first();
   if (existing) return existing;
+  if (isApiMode() && navigator.onLine) {
+    let v = await apiClient.getVistoria(osId);
+    if (!v) v = await apiClient.createVistoria(osId);
+    await db.vistorias.put(v);
+    return v;
+  }
   const v: Vistoria = {
     id: uid('V'),
     osId,
@@ -97,6 +135,7 @@ export async function getOrCreateVistoria(osId: string): Promise<Vistoria> {
     updatedAt: now(),
   };
   await db.vistorias.add(v);
+  await pushApi();
   return v;
 }
 
@@ -104,19 +143,31 @@ export async function saveVistoria(
   vistoriaId: string,
   data: Partial<Pick<Vistoria, 'checklist' | 'divergencia' | 'justificativa' | 'checkInLat' | 'checkInLng' | 'checkInAt'>>,
 ) {
+  if (isApiMode() && navigator.onLine) {
+    const v = await apiClient.patchVistoria(vistoriaId, data);
+    await db.vistorias.put(v);
+    return;
+  }
   await db.vistorias.update(vistoriaId, { ...data, updatedAt: now() });
+  await pushApi();
 }
 
 export async function concluirVistoria(vistoriaId: string, osId: string) {
   const t = now();
+  if (isApiMode() && navigator.onLine) {
+    await apiClient.patchVistoria(vistoriaId, { concluidaAt: t, syncStatus: 'local' });
+    await apiClient.patchOrdem(osId, 'pendente_sync');
+    const v = await db.vistorias.get(vistoriaId);
+    const o = await db.ordens.get(osId);
+    if (v) await db.vistorias.put({ ...v, concluidaAt: t, syncStatus: 'local', updatedAt: t });
+    if (o) await db.ordens.put({ ...o, status: 'pendente_sync', updatedAt: t });
+    return;
+  }
   await db.transaction('rw', db.vistorias, db.ordens, async () => {
-    await db.vistorias.update(vistoriaId, {
-      concluidaAt: t,
-      syncStatus: 'local',
-      updatedAt: t,
-    });
+    await db.vistorias.update(vistoriaId, { concluidaAt: t, syncStatus: 'local', updatedAt: t });
     await db.ordens.update(osId, { status: 'pendente_sync', updatedAt: t });
   });
+  await pushApi();
 }
 
 export async function syncPendentes(fiscalId: string): Promise<number> {
@@ -134,22 +185,27 @@ export async function syncPendentes(fiscalId: string): Promise<number> {
       n++;
     }
   }
-  const api = import.meta.env.VITE_API_URL as string | undefined;
-  if (api) {
-    try {
-      await fetch(`${api}/api/fisaval/sync/push`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fiscalId, syncedAt: now(), count: n }),
-      });
-    } catch {
-      /* offline OK — dados já locais */
-    }
-  }
+  await pushApi();
   return n;
 }
 
 export async function homologar(osId: string, aprovado: boolean) {
+  if (isApiMode() && navigator.onLine) {
+    await apiClient.homologar(osId, aprovado);
+    const os = await db.ordens.get(osId);
+    if (os) {
+      await db.ordens.put({
+        ...os,
+        status: aprovado ? 'homologada' : 'em_vistoria',
+        updatedAt: now(),
+      });
+      if (aprovado) {
+        const d = await db.demandas.get(os.demandaId);
+        if (d) await db.demandas.put({ ...d, status: 'concluida', updatedAt: now() });
+      }
+    }
+    return;
+  }
   await db.ordens.update(osId, {
     status: aprovado ? 'homologada' : 'em_vistoria',
     updatedAt: now(),
@@ -158,9 +214,24 @@ export async function homologar(osId: string, aprovado: boolean) {
     const os = await db.ordens.get(osId);
     if (os) await db.demandas.update(os.demandaId, { status: 'concluida', updatedAt: now() });
   }
+  await pushApi();
 }
 
 export async function getKpis() {
+  if (isApiMode() && navigator.onLine) {
+    try {
+      const k = await apiClient.getKpis();
+      return {
+        osHoje: k.osHoje,
+        concluidas: k.concluidas,
+        homolog: k.homolog,
+        divergencias: k.divergencias,
+        fiscais: k.fiscais as Awaited<ReturnType<typeof listFiscais>>,
+      };
+    } catch {
+      /* fallback local */
+    }
+  }
   const ordens = await db.ordens.toArray();
   const hoje = new Date().toISOString().slice(0, 10);
   const osHoje = ordens.filter((o) => o.createdAt.startsWith(hoje)).length;

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { isApiMode } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
 
 export function LoginPage() {
@@ -38,6 +39,7 @@ export function LoginPage() {
           </button>
         </form>
         <div className="login-hint">
+          {isApiMode() && <p><strong>Modo servidor</strong> — dados na API (compartilhado entre dispositivos)</p>}
           <p><strong>gestor@demo</strong> / demo123 — Painel e demandas</p>
           <p><strong>fiscal@demo</strong> / demo123 — PWA de campo</p>
         </div>

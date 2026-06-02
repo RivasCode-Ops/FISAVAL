@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { apiLogin, hydrateDexieFromApi } from '@/api/client';
+import { isApiMode } from '@/api/config';
 import { db } from '@/db/database';
 import type { Session, UserRole } from '@/types';
 
@@ -15,7 +17,27 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       session: null,
       async login(email, senha) {
-        const user = await db.users.where('email').equals(email.trim().toLowerCase()).first();
+        const normalized = email.trim().toLowerCase();
+
+        if (isApiMode() && navigator.onLine) {
+          try {
+            const { user } = await apiLogin(normalized, senha);
+            await hydrateDexieFromApi();
+            set({
+              session: {
+                userId: user.id,
+                email: user.email,
+                nome: user.nome,
+                role: user.role,
+              },
+            });
+            return true;
+          } catch {
+            /* tenta local */
+          }
+        }
+
+        const user = await db.users.where('email').equals(normalized).first();
         if (!user || user.senha !== senha) return false;
         set({
           session: {

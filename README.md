@@ -15,7 +15,17 @@ Sistema de fiscalização de campo para secretarias de finanças e cadastro imob
 
 Módulos: **Demandas + OS**, **Campo** (mapa, GPS, checklist, sync), **Painel** (KPIs, homologação).
 
-Publicar: [docs/DEPLOY.md](docs/DEPLOY.md) — **https://rivascode-ops.github.io/FISAVAL/**
+### API compartilhada (fase 2)
+
+```powershell
+cd c:\_PROJETOS\E-FISCAL
+npm install
+npm run dev:all
+```
+
+Copie `app/.env.example` → `app/.env` (`VITE_API_URL=http://127.0.0.1:8790`). Detalhes: [docs/PRODUCAO.md](docs/PRODUCAO.md).
+
+Publicar front: [docs/DEPLOY.md](docs/DEPLOY.md) — **https://rivascode-ops.github.io/FISAVAL/**
 
 Se o link der 404: **Settings → Pages → branch `gh-pages` → / (root)** — ver [DEPLOY.md](docs/DEPLOY.md).
 
