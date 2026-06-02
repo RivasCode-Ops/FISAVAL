@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './config.js';
+import type { ImportRow } from './importCsv.js';
 import type { DbShape, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 
 const dbPath = join(config.dataDir, 'fisaval.json');
@@ -121,6 +122,31 @@ export const jsonRepo = {
     const d: Demanda = { ...input, id: uid('D'), status: 'aberta', createdAt: t, updatedAt: t };
     mutate((db) => db.demandas.push(d));
     return d;
+  },
+  async bulkImportDemandas(rows: ImportRow[]) {
+    const t = now();
+    const created: Demanda[] = [];
+    mutate((db) => {
+      for (const r of rows) {
+        const d: Demanda = {
+          id: uid('D'),
+          tipo: r.tipo,
+          bairro: r.bairro,
+          prioridade: r.prioridade,
+          prazo: r.prazo,
+          status: 'aberta',
+          inscricao: r.inscricao,
+          endereco: r.endereco,
+          lat: r.lat ?? -23.55 + created.length * 0.001,
+          lng: r.lng ?? -46.633 + created.length * 0.001,
+          createdAt: t,
+          updatedAt: t,
+        };
+        db.demandas.push(d);
+        created.push(d);
+      }
+    });
+    return created;
   },
   async gerarOs(demandaId: string, fiscalId: string, fiscalNome: string) {
     const db = loadDb();

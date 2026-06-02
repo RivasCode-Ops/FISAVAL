@@ -5,6 +5,7 @@ import { CampoPage } from '@/pages/CampoPage';
 import { DemandasPage } from '@/pages/DemandasPage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
 import { LoginPage } from '@/pages/LoginPage';
+import { AuditoriaPage } from '@/pages/AuditoriaPage';
 import { PainelPage } from '@/pages/PainelPage';
 import { useAuthStore } from '@/store/authStore';
 
@@ -20,6 +21,7 @@ export function App() {
             <Route index element={<HomeRedirect />} />
             <Route path="painel" element={<PainelPage />} />
             <Route path="demandas" element={<DemandasPage />} />
+            <Route path="auditoria" element={<AuditoriaPage />} />
             <Route path="campo" element={<CampoPage />} />
           </Route>
         </Route>

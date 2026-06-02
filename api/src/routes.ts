@@ -10,12 +10,19 @@ import {
   removePushSubscription,
   savePushSubscription,
 } from './push.js';
+import { logAudit, listAudit } from './audit.js';
+import { parseDemandasCsv } from './importCsv.js';
 import { config } from './config.js';
 import { getRepo } from './repo.js';
 import { uid } from './jsonRepo.js';
+import type { AuthPayload } from './auth.js';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria } from './types.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+
+function auditUser(auth: AuthPayload) {
+  return { id: auth.sub, email: auth.email, nome: auth.nome, role: auth.role };
+}
 
 function asyncHandler(
   fn: (req: import('express').Request, res: import('express').Response) => Promise<void>,
@@ -48,6 +55,10 @@ export function createRoutes(): Router {
         role: user.role,
         nome: user.nome,
       });
+      logAudit(
+        { id: user.id, email: user.email, nome: user.nome, role: user.role },
+        'login',
+      );
       res.json({
         token,
         user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
@@ -102,6 +113,11 @@ export function createRoutes(): Router {
         lat: input.lat ?? -23.55,
         lng: input.lng ?? -46.633,
       });
+      logAudit(auditUser(getAuth(req)!), 'demanda.criar', {
+        entity: 'demanda',
+        entityId: d.id,
+        detail: d.bairro,
+      });
       res.status(201).json(d);
     }),
   );
@@ -115,6 +131,11 @@ export function createRoutes(): Router {
         res.status(404).json({ error: 'Demanda não encontrada' });
         return;
       }
+      logAudit(auditUser(getAuth(req)!), 'os.gerar', {
+        entity: 'ordem',
+        entityId: os.id,
+        detail: `${os.fiscalNome} · ${os.endereco}`,
+      });
       res.status(201).json(os);
     }),
   );
@@ -140,6 +161,10 @@ export function createRoutes(): Router {
     asyncHandler(async (req, res) => {
       const { aprovado } = req.body as { aprovado: boolean };
       await getRepo().homologar(req.params.id, aprovado);
+      logAudit(auditUser(getAuth(req)!), aprovado ? 'os.homologar' : 'os.devolver', {
+        entity: 'ordem',
+        entityId: req.params.id,
+      });
       res.json({ ok: true });
     }),
   );
@@ -290,6 +315,57 @@ export function createRoutes(): Router {
       }
       await savePushSubscription(auth.sub, sub);
       res.json({ ok: true });
+    }),
+  );
+
+  router.get(
+    '/audit',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (req, res) => {
+      const limit = Math.min(Number(req.query.limit) || 200, 500);
+      res.json(listAudit(limit));
+    }),
+  );
+
+  router.post(
+    '/import/demandas',
+    requireRoles('gestor', 'admin'),
+    upload.single('file'),
+    asyncHandler(async (req, res) => {
+      if (!req.file) {
+        res.status(400).json({ error: 'Envie o arquivo no campo file' });
+        return;
+      }
+      const text = req.file.buffer.toString('utf8');
+      const { rows, errors } = parseDemandasCsv(text);
+      if (!rows.length) {
+        res.status(400).json({ error: 'Nenhuma linha válida', errors });
+        return;
+      }
+      const repo = getRepo();
+      let created: { id: string }[] = [];
+      if ('bulkImportDemandas' in repo && typeof repo.bulkImportDemandas === 'function') {
+        created = await repo.bulkImportDemandas(rows);
+      } else {
+        for (const r of rows) {
+          const d = await repo.createDemanda({
+            tipo: r.tipo,
+            bairro: r.bairro,
+            prioridade: r.prioridade,
+            prazo: r.prazo,
+            inscricao: r.inscricao,
+            endereco: r.endereco,
+            lat: r.lat ?? -23.55,
+            lng: r.lng ?? -46.633,
+          });
+          created.push(d);
+        }
+      }
+      logAudit(auditUser(getAuth(req)!), 'import.demandas', {
+        entity: 'demanda',
+        detail: `${created.length} registros`,
+      });
+      res.json({ created: created.length, errors });
     }),
   );
 

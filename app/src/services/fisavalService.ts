@@ -9,7 +9,10 @@ import {
   markFotoSynced,
   saveFotoLocal,
 } from '@/db/fotos';
+import { parseDemandasCsvText } from '@/lib/csvParse';
 import { filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from '@/lib/rota';
+import { getApiUrl } from '@/api/config';
+import { useAuthStore } from '@/store/authStore';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria, VistoriaFoto } from '@/types';
 
 const now = () => new Date().toISOString();
@@ -34,6 +37,48 @@ export const CHECKLIST_ITEMS = [
 ] as const;
 
 /** Baixa estado atual da API para o IndexedDB (gestor / multi-dispositivo). */
+export async function importDemandasCsvFile(file: File): Promise<{ created: number; errors: string[] }> {
+  const text = await file.text();
+  const { rows, errors } = parseDemandasCsvText(text);
+  if (!rows.length) return { created: 0, errors: errors.length ? errors : ['Nenhuma linha válida'] };
+
+  if (isApiMode() && navigator.onLine) {
+    const base = getApiUrl();
+    const token = useAuthStore.getState().token;
+    if (base && token) {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${base}/api/fisaval/import/demandas`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = (await res.json().catch(() => ({}))) as { created?: number; errors?: string[]; error?: string };
+      if (!res.ok) return { created: 0, errors: [data.error ?? 'Falha na importação'] };
+      await refreshFromServer();
+      return { created: data.created ?? 0, errors: [...errors, ...(data.errors ?? [])] };
+    }
+  }
+
+  let created = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    await createDemanda({
+      tipo: r.tipo,
+      bairro: r.bairro,
+      prioridade: r.prioridade,
+      prazo: r.prazo,
+      endereco: r.endereco,
+      inscricao: r.inscricao,
+      lat: r.lat ?? -23.55 + i * 0.001,
+      lng: r.lng ?? -46.633 + i * 0.001,
+    });
+    created++;
+  }
+  await pushApi();
+  return { created, errors };
+}
+
 export async function refreshFromServer(): Promise<boolean> {
   if (!isApiMode() || !navigator.onLine) return false;
   try {

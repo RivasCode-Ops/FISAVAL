@@ -7,6 +7,7 @@ import {
   gerarOs,
   listDemandas,
   listFiscais,
+  importDemandasCsvFile,
   refreshFromServer,
 } from '@/services/fisavalService';
 
@@ -118,6 +119,30 @@ export function DemandasPage() {
             </button>
           </div>
         </form>
+      </div>
+
+      <div className="card">
+        <h2>Importar cadastro (CSV)</h2>
+        <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
+          Colunas: <code>bairro</code> (obrig.), <code>inscricao</code>, <code>endereco</code>, <code>tipo</code>,{' '}
+          <code>prioridade</code>, <code>prazo</code>, <code>lat</code>, <code>lng</code> — separador ; ou ,
+        </p>
+        <p style={{ fontSize: '0.85rem' }}>
+          Modelo: <a href="https://github.com/RivasCode-Ops/FISAVAL/blob/main/docs/samples/import-demandas.csv">import-demandas.csv</a>
+        </p>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            void importDemandasCsvFile(file).then((r) => {
+              setMsg(`${r.created} demanda(s) importada(s).${r.errors.length ? ` Avisos: ${r.errors.join('; ')}` : ''}`);
+              void reload();
+            });
+            e.target.value = '';
+          }}
+        />
       </div>
 
       <div className="card">

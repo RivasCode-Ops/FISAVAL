@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { isApiMode } from '@/api/config';
+import { getApiUrl, isApiMode } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
 import { useApiHealth } from '@/hooks/useApiHealth';
 import { useOnline } from '@/hooks/useOnline';
@@ -13,6 +14,17 @@ export function Layout() {
   const online = useOnline();
   const { health, checking, check } = useApiHealth(60_000);
   const apiMode = isApiMode();
+  const [municipio, setMunicipio] = useState('');
+
+  useEffect(() => {
+    const base = getApiUrl();
+    if (base) {
+      void fetch(`${base}/api/fisaval/config`)
+        .then((r) => r.json())
+        .then((c: { municipio?: string }) => setMunicipio(c.municipio ?? ''))
+        .catch(() => {});
+    }
+  }, []);
 
   async function onRefresh() {
     const ok = await refreshFromServer();
@@ -26,6 +38,9 @@ export function Layout() {
       <header className="topbar">
         <div>
           <h1>FISAVAL</h1>
+          {municipio && (
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)' }}>{municipio}</p>
+          )}
           <span className="offline-pill" data-on={online ? 'true' : 'false'}>
             {online ? '● Online' : '○ Offline (dados locais)'}
           </span>
@@ -40,6 +55,7 @@ export function Layout() {
             <>
               <NavLink to="/painel" end>Painel</NavLink>
               <NavLink to="/demandas">Demandas</NavLink>
+              <NavLink to="/auditoria">Auditoria</NavLink>
             </>
           )}
           {hasRole('fiscal') && <NavLink to="/campo">Campo</NavLink>}

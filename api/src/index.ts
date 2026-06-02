@@ -15,9 +15,14 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     app: 'fisaval-api',
-    version: '0.3',
+    version: '0.4',
     storage: usePostgres() ? 'postgres+postgis' : 'json',
+    municipio: config.municipioNome,
   });
+});
+
+app.get('/api/fisaval/config', (_req, res) => {
+  res.json({ municipio: config.municipioNome, version: '0.4' });
 });
 
 app.use('/api/fisaval', createRoutes());
