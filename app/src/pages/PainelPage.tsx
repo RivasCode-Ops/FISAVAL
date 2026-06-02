@@ -8,8 +8,10 @@ import { PAINEL_MAP_LEGEND, PainelMap } from '@/components/PainelMap';
 import {
   buildOrdensCsvRows,
   downloadCsv,
+  printHomologacaoLaudo,
   printRelatorio,
 } from '@/lib/export';
+import { getRuntimeTenantId } from '@/lib/tenantFilter';
 import {
   CHECKLIST_ITEMS,
   getKpis,
@@ -286,7 +288,24 @@ export function PainelPage() {
                     style={{ marginTop: '0.35rem' }}
                   />
                 )}
-                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {v && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline"
+                        onClick={() =>
+                          printHomologacaoLaudo({
+                            os: o,
+                            vistoria: v,
+                            assinaturaUrl: assinaturaUrls[o.id],
+                            tenantId: getRuntimeTenantId() || undefined,
+                            geradoEm: new Date().toLocaleString('pt-BR'),
+                          })
+                        }
+                      >
+                        Imprimir laudo
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-sm btn-ok"

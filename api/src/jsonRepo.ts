@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './config.js';
+import { filterDemandas, filterOrdens, matchesTenant } from './tenant.js';
 import type { ImportRow } from './importCsv.js';
 import type { DbShape, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 
@@ -115,7 +116,7 @@ export const jsonRepo = {
     });
   },
   async listDemandas() {
-    return loadDb().demandas;
+    return filterDemandas(loadDb().demandas);
   },
   async createDemanda(input: Omit<Demanda, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
     const t = now();
@@ -159,7 +160,7 @@ export const jsonRepo = {
   async gerarOs(demandaId: string, fiscalId: string, fiscalNome: string) {
     const db = loadDb();
     const demanda = db.demandas.find((x) => x.id === demandaId);
-    if (!demanda) return null;
+    if (!demanda || !matchesTenant(demanda.tenantId)) return null;
     const t = now();
     const os: OrdemServico = {
       id: uid('OS'),
@@ -189,7 +190,7 @@ export const jsonRepo = {
   },
   async listOrdens(fiscalId?: string) {
     const db = loadDb();
-    let list = db.ordens;
+    let list = filterOrdens(db.ordens, db.demandas);
     if (fiscalId) list = list.filter((o) => o.fiscalId === fiscalId).sort((a, b) => a.rotaOrdem - b.rotaOrdem);
     else list = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return list;
@@ -276,14 +277,16 @@ export const jsonRepo = {
   },
   async getKpis() {
     const db = loadDb();
+    const ordens = filterOrdens(db.ordens, db.demandas);
+    const osIds = new Set(ordens.map((o) => o.id));
     const hoje = now().slice(0, 10);
     return {
-      osHoje: db.ordens.filter((o) => o.createdAt.startsWith(hoje)).length || db.ordens.length,
-      concluidas: db.ordens.filter((o) =>
+      osHoje: ordens.filter((o) => o.createdAt.startsWith(hoje)).length || ordens.length,
+      concluidas: ordens.filter((o) =>
         ['concluida', 'homologacao', 'homologada', 'pendente_sync'].includes(o.status),
       ).length,
-      homolog: db.ordens.filter((o) => o.status === 'homologacao').length,
-      divergencias: db.vistorias.filter((v) => v.divergencia).length,
+      homolog: ordens.filter((o) => o.status === 'homologacao').length,
+      divergencias: db.vistorias.filter((v) => v.divergencia && osIds.has(v.osId)).length,
       fiscais: db.users.filter((u) => u.role === 'fiscal'),
     };
   },

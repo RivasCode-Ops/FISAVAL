@@ -150,3 +150,62 @@ export function printRelatorio(data: RelatorioPayload) {
 </body></html>`);
   w.document.close();
 }
+
+export type LaudoHomologacaoPayload = {
+  os: OrdemServico;
+  vistoria: Vistoria;
+  assinaturaUrl?: string | null;
+  municipio?: string;
+  tenantId?: string;
+  geradoEm: string;
+};
+
+/** Laudo imprimível de uma OS em homologação (com assinatura do fiscal). */
+export function printHomologacaoLaudo(data: LaudoHomologacaoPayload) {
+  const w = window.open('', '_blank', 'noopener,noreferrer');
+  if (!w) {
+    alert('Permita pop-ups para imprimir o laudo.');
+    return;
+  }
+  const checks = CHECKLIST_ITEMS.filter((c) => data.vistoria.checklist[c.id])
+    .map((c) => c.label)
+    .join(', ');
+  const assinaturaBlock = data.assinaturaUrl
+    ? `<img src="${data.assinaturaUrl}" alt="Assinatura" style="max-width:280px;border:1px solid #ccc;border-radius:4px"/>`
+    : '<p style="color:#888">Assinatura não disponível neste dispositivo.</p>';
+  const meta = [data.municipio, data.tenantId].filter(Boolean).join(' · ');
+
+  w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="utf-8"/><title>Laudo ${data.os.id}</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #111; max-width: 720px; }
+  h1 { font-size: 1.2rem; margin: 0 0 0.25rem; }
+  .meta { color: #555; font-size: 0.85rem; margin-bottom: 1rem; }
+  dl { display: grid; grid-template-columns: 9rem 1fr; gap: 0.35rem 0.75rem; font-size: 0.9rem; }
+  dt { color: #555; margin: 0; }
+  dd { margin: 0; }
+  .sig { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  @media print { body { margin: 0.75rem; } }
+</style></head><body>
+<h1>FISAVAL — Laudo de vistoria</h1>
+<p class="meta">${meta ? `${meta}<br/>` : ''}Gerado em ${data.geradoEm}</p>
+<dl>
+  <dt>OS</dt><dd>${data.os.id}</dd>
+  <dt>Inscrição</dt><dd>${data.os.inscricao}</dd>
+  <dt>Endereço</dt><dd>${data.os.endereco}</dd>
+  <dt>Bairro</dt><dd>${data.os.bairro}</dd>
+  <dt>Fiscal</dt><dd>${data.os.fiscalNome}</dd>
+  <dt>Divergência</dt><dd>${data.vistoria.divergencia ? 'Sim' : 'Não'}</dd>
+  <dt>Check-in</dt><dd>${data.vistoria.checkInAt ? new Date(data.vistoria.checkInAt).toLocaleString('pt-BR') : '—'}</dd>
+  <dt>Concluída</dt><dd>${data.vistoria.concluidaAt ? new Date(data.vistoria.concluidaAt).toLocaleString('pt-BR') : '—'}</dd>
+  <dt>Checklist</dt><dd>${checks || '—'}</dd>
+  ${data.vistoria.justificativa ? `<dt>Justificativa</dt><dd>${data.vistoria.justificativa}</dd>` : ''}
+</dl>
+<div class="sig">
+  <p><strong>Assinatura do fiscal</strong>${data.vistoria.assinaturaNome ? ` — ${data.vistoria.assinaturaNome}` : ''}</p>
+  ${assinaturaBlock}
+</div>
+<script>window.onload=function(){window.print();}</script>
+</body></html>`);
+  w.document.close();
+}

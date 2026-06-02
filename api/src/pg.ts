@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { config } from './config.js';
+import { matchesTenant } from './tenant.js';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 import { uid } from './jsonRepo.js';
 
@@ -29,6 +30,7 @@ export async function initPgSchema() {
     await p.query(plain);
     pgHasGeom = false;
   }
+  await p.query('ALTER TABLE demandas ADD COLUMN IF NOT EXISTS tenant_id TEXT');
 }
 
 type PgQuery = Pick<pg.Pool, 'query'>;
@@ -46,15 +48,17 @@ async function insertDemandaRowQ(
     endereco: string | null;
     lat: number;
     lng: number;
+    tenantId?: string;
     createdAt: string;
     updatedAt?: string;
   },
 ) {
   const t2 = values.updatedAt ?? values.createdAt;
+  const tenant = values.tenantId ?? config.tenantId;
   if (pgHasGeom) {
     await q.query(
-      `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, geom, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, ST_SetSRID(ST_MakePoint($10,$9),4326)::geography, $11,$12)`,
+      `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, geom, tenant_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, ST_SetSRID(ST_MakePoint($10,$9),4326)::geography, $11,$12,$13)`,
       [
         values.id,
         values.tipo,
@@ -66,14 +70,15 @@ async function insertDemandaRowQ(
         values.endereco,
         values.lat,
         values.lng,
+        tenant,
         values.createdAt,
         t2,
       ],
     );
   } else {
     await q.query(
-      `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, tenant_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         values.id,
         values.tipo,
@@ -85,6 +90,7 @@ async function insertDemandaRowQ(
         values.endereco,
         values.lat,
         values.lng,
+        tenant,
         values.createdAt,
         t2,
       ],
@@ -106,10 +112,17 @@ function rowDemanda(r: Record<string, unknown>): Demanda {
     endereco: (r.endereco as string) ?? undefined,
     lat: Number(r.lat),
     lng: Number(r.lng),
+    tenantId: (r.tenant_id as string) ?? undefined,
     createdAt: new Date(r.created_at as string).toISOString(),
     updatedAt: new Date(r.updated_at as string).toISOString(),
   };
 }
+
+const tenantOrdemWhere = (tenantParam: string) => `EXISTS (
+  SELECT 1 FROM demandas d
+  WHERE d.id = ordens.demanda_id
+    AND (d.tenant_id IS NULL OR d.tenant_id = ${tenantParam})
+)`;
 
 function rowOrdem(r: Record<string, unknown>): OrdemServico {
   return {
@@ -254,6 +267,7 @@ export const pgRepo = {
             endereco: x.endereco ?? null,
             lat: x.lat,
             lng: x.lng,
+            tenantId: x.tenantId,
             createdAt: x.createdAt,
             updatedAt: x.updatedAt,
           });
@@ -315,7 +329,10 @@ export const pgRepo = {
     }
   },
   async listDemandas() {
-    const { rows } = await getPool().query('SELECT * FROM demandas ORDER BY updated_at DESC');
+    const { rows } = await getPool().query(
+      'SELECT * FROM demandas WHERE tenant_id IS NULL OR tenant_id = $1 ORDER BY updated_at DESC',
+      [config.tenantId],
+    );
     return rows.map((r) => rowDemanda(r));
   },
   async createDemanda(input: {
@@ -356,6 +373,8 @@ export const pgRepo = {
       await getPool().query('SELECT * FROM demandas WHERE id = $1', [demandaId])
     ).rows[0] as Record<string, unknown> | undefined;
     if (!dem) return null;
+    const demRow = rowDemanda(dem);
+    if (!matchesTenant(demRow.tenantId)) return null;
     const t = now();
     const id = uid('OS');
     const { rows: cnt } = await getPool().query(
@@ -392,12 +411,15 @@ export const pgRepo = {
   async listOrdens(fiscalId?: string) {
     if (fiscalId) {
       const { rows } = await getPool().query(
-        'SELECT * FROM ordens WHERE fiscal_id = $1 ORDER BY rota_ordem',
-        [fiscalId],
+        `SELECT * FROM ordens WHERE fiscal_id = $1 AND ${tenantOrdemWhere('$2')} ORDER BY rota_ordem`,
+        [fiscalId, config.tenantId],
       );
       return rows.map((r) => rowOrdem(r));
     }
-    const { rows } = await getPool().query('SELECT * FROM ordens ORDER BY updated_at DESC');
+    const { rows } = await getPool().query(
+      `SELECT * FROM ordens WHERE ${tenantOrdemWhere('$1')} ORDER BY updated_at DESC`,
+      [config.tenantId],
+    );
     return rows.map((r) => rowOrdem(r));
   },
   async patchOrdem(id: string, status: OsStatus) {
@@ -505,8 +527,16 @@ export const pgRepo = {
   },
   async getKpis() {
     const hoje = now().slice(0, 10);
-    const { rows: ordens } = await getPool().query('SELECT status, created_at FROM ordens');
-    const { rows: vistorias } = await getPool().query('SELECT divergencia FROM vistorias');
+    const { rows: ordens } = await getPool().query(
+      `SELECT o.status, o.created_at, o.id FROM ordens o WHERE ${tenantOrdemWhere('$1')}`,
+      [config.tenantId],
+    );
+    const { rows: vistorias } = await getPool().query(
+      `SELECT v.divergencia FROM vistorias v
+       JOIN ordens o ON o.id = v.os_id
+       WHERE ${tenantOrdemWhere('$1')}`,
+      [config.tenantId],
+    );
     const { rows: fiscais } = await getPool().query(`SELECT id, email, nome, role FROM users WHERE role = 'fiscal'`);
     const osHoje = ordens.filter((o) => String(o.created_at).startsWith(hoje)).length || ordens.length;
     return {

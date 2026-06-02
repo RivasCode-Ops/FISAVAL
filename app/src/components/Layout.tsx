@@ -4,6 +4,7 @@ import { getApiUrl, isApiMode } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
 import { useApiHealth } from '@/hooks/useApiHealth';
 import { useOnline } from '@/hooks/useOnline';
+import { setRuntimeTenantId } from '@/lib/tenantFilter';
 import { refreshFromServer } from '@/services/fisavalService';
 
 export function Layout() {
@@ -24,7 +25,9 @@ export function Layout() {
         .then((r) => r.json())
         .then((c: { municipio?: string; tenantId?: string }) => {
           setMunicipio(c.municipio ?? '');
-          setTenantId(c.tenantId ?? '');
+          const tid = c.tenantId ?? '';
+          setTenantId(tid);
+          setRuntimeTenantId(tid);
         })
         .catch(() => {});
     }

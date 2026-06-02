@@ -26,5 +26,6 @@ MUNICIPIO_NOME=Prefeitura de Exemplo
 
 ## Próximo
 
+- Filtro por tenant nas listagens — ver [FASE12.md](FASE12.md)
 - Multi-tenant com banco isolado por `TENANT_ID`
 - Certificado ICP-Brasil / assinatura gov.br

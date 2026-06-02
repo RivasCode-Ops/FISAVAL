@@ -25,6 +25,7 @@ import {
   saveFotoLocal,
 } from '@/db/fotos';
 import { parseDemandasCsvText } from '@/lib/csvParse';
+import { filterDemandas, filterOrdens, getRuntimeTenantId } from '@/lib/tenantFilter';
 import { filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from '@/lib/rota';
 import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
@@ -105,7 +106,13 @@ export async function refreshFromServer(): Promise<boolean> {
 }
 
 export async function listDemandas() {
-  return db.demandas.orderBy('updatedAt').reverse().toArray();
+  const list = await db.demandas.orderBy('updatedAt').reverse().toArray();
+  return filterDemandas(list);
+}
+
+async function listOrdensTenantScoped(): Promise<OrdemServico[]> {
+  const demandas = await db.demandas.toArray();
+  return filterOrdens(await db.ordens.toArray(), demandas);
 }
 
 export async function getVistoriaMapByOs(): Promise<Map<string, Vistoria>> {
@@ -141,6 +148,7 @@ export async function createDemanda(input: {
       inscricao: input.inscricao,
       lat: input.lat ?? -23.55,
       lng: input.lng ?? -46.633,
+      tenantId: getRuntimeTenantId() || undefined,
       createdAt: now(),
       updatedAt: now(),
     };
@@ -211,7 +219,8 @@ export async function otimizarRotaFiscal(fiscalId: string, start?: GeoPoint): Pr
 }
 
 export async function listAllOrdens() {
-  return db.ordens.orderBy('updatedAt').reverse().toArray();
+  const list = await listOrdensTenantScoped();
+  return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export async function updateOsStatus(osId: string, status: OsStatus) {
@@ -443,7 +452,8 @@ export async function getKpis() {
       /* fallback local */
     }
   }
-  const ordens = await db.ordens.toArray();
+  const ordens = await listOrdensTenantScoped();
+  const osIds = new Set(ordens.map((o) => o.id));
   const hoje = new Date().toISOString().slice(0, 10);
   const osHoje = ordens.filter((o) => o.createdAt.startsWith(hoje)).length;
   const concluidas = ordens.filter((o) =>
@@ -451,7 +461,7 @@ export async function getKpis() {
   ).length;
   const homolog = ordens.filter((o) => o.status === 'homologacao').length;
   const vistorias = await db.vistorias.toArray();
-  const divergencias = vistorias.filter((v) => v.divergencia).length;
+  const divergencias = vistorias.filter((v) => v.divergencia && osIds.has(v.osId)).length;
   const fiscais = await db.users.where('role').equals('fiscal').toArray();
   return { osHoje: osHoje || ordens.length, concluidas, homolog, divergencias, fiscais };
 }
