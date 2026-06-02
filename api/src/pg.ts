@@ -8,6 +8,7 @@ import { uid } from './jsonRepo.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 let pool: pg.Pool | null = null;
+let pgHasGeom = false;
 
 export function getPool(): pg.Pool {
   if (!pool) pool = new pg.Pool({ connectionString: config.databaseUrl });
@@ -15,8 +16,80 @@ export function getPool(): pg.Pool {
 }
 
 export async function initPgSchema() {
-  const sql = readFileSync(join(__dir, '..', 'sql', '001_init.sql'), 'utf8');
-  await getPool().query(sql);
+  const p = getPool();
+  try {
+    await p.query('CREATE EXTENSION IF NOT EXISTS postgis');
+    const sql = readFileSync(join(__dir, '..', 'sql', '001_init.sql'), 'utf8');
+    await p.query(sql);
+    pgHasGeom = true;
+    console.log('PostgreSQL: schema PostGIS');
+  } catch (err) {
+    console.warn('PostGIS indisponível, usando schema plain:', err);
+    const plain = readFileSync(join(__dir, '..', 'sql', '001_init_plain.sql'), 'utf8');
+    await p.query(plain);
+    pgHasGeom = false;
+  }
+}
+
+type PgQuery = Pick<pg.Pool, 'query'>;
+
+async function insertDemandaRowQ(
+  q: PgQuery,
+  values: {
+    id: string;
+    tipo: string;
+    bairro: string;
+    prioridade: string;
+    prazo: string;
+    status: string;
+    inscricao: string | null;
+    endereco: string | null;
+    lat: number;
+    lng: number;
+    createdAt: string;
+    updatedAt?: string;
+  },
+) {
+  const t2 = values.updatedAt ?? values.createdAt;
+  if (pgHasGeom) {
+    await q.query(
+      `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, geom, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, ST_SetSRID(ST_MakePoint($10,$9),4326)::geography, $11,$12)`,
+      [
+        values.id,
+        values.tipo,
+        values.bairro,
+        values.prioridade,
+        values.prazo,
+        values.status,
+        values.inscricao,
+        values.endereco,
+        values.lat,
+        values.lng,
+        values.createdAt,
+        t2,
+      ],
+    );
+  } else {
+    await q.query(
+      `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        values.id,
+        values.tipo,
+        values.bairro,
+        values.prioridade,
+        values.prazo,
+        values.status,
+        values.inscricao,
+        values.endereco,
+        values.lat,
+        values.lng,
+        values.createdAt,
+        t2,
+      ],
+    );
+  }
 }
 
 const now = () => new Date().toISOString();
@@ -100,23 +173,19 @@ export async function seedPg() {
       [u.id, u.email, u.nome, u.role, u.senha],
     );
   }
-  await getPool().query(
-    `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, geom, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, ST_SetSRID(ST_MakePoint($10,$9),4326)::geography, $11,$11)`,
-    [
-      'D-1042',
-      'Revisão cadastral',
-      'Centro',
-      'alta',
-      '2026-06-05',
-      'os_gerada',
-      '12.034.0056.0001',
-      'R. das Flores, 123',
-      -23.5505,
-      -46.6333,
-      t,
-    ],
-  );
+  await insertDemandaRowQ(getPool(), {
+    id: 'D-1042',
+    tipo: 'Revisão cadastral',
+    bairro: 'Centro',
+    prioridade: 'alta',
+    prazo: '2026-06-05',
+    status: 'os_gerada',
+    inscricao: '12.034.0056.0001',
+    endereco: 'R. das Flores, 123',
+    lat: -23.5505,
+    lng: -46.6333,
+    createdAt: t,
+  });
   await getPool().query(
     `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, status, lat, lng, rota_ordem, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1,$11,$11)`,
@@ -172,24 +241,20 @@ export const pgRepo = {
       if (partial.demandas) {
         await client.query('DELETE FROM demandas');
         for (const x of partial.demandas) {
-          await client.query(
-            `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, geom, created_at, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, ST_SetSRID(ST_MakePoint($10,$9),4326)::geography, $11,$12)`,
-            [
-              x.id,
-              x.tipo,
-              x.bairro,
-              x.prioridade,
-              x.prazo,
-              x.status,
-              x.inscricao ?? null,
-              x.endereco ?? null,
-              x.lat,
-              x.lng,
-              x.createdAt,
-              x.updatedAt,
-            ],
-          );
+          await insertDemandaRowQ(client, {
+            id: x.id,
+            tipo: x.tipo,
+            bairro: x.bairro,
+            prioridade: x.prioridade,
+            prazo: x.prazo,
+            status: x.status,
+            inscricao: x.inscricao ?? null,
+            endereco: x.endereco ?? null,
+            lat: x.lat,
+            lng: x.lng,
+            createdAt: x.createdAt,
+            updatedAt: x.updatedAt,
+          });
         }
       }
       if (partial.ordens) {
@@ -265,11 +330,19 @@ export const pgRepo = {
     const id = uid('D');
     const lat = input.lat ?? -23.55;
     const lng = input.lng ?? -46.633;
-    await getPool().query(
-      `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, geom, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,'aberta',$6,$7,$8,$9, ST_SetSRID(ST_MakePoint($9,$8),4326)::geography, $10,$10)`,
-      [id, input.tipo, input.bairro, input.prioridade, input.prazo, input.inscricao ?? null, input.endereco ?? null, lat, lng, t],
-    );
+    await insertDemandaRowQ(getPool(), {
+      id,
+      tipo: input.tipo,
+      bairro: input.bairro,
+      prioridade: input.prioridade,
+      prazo: input.prazo,
+      status: 'aberta',
+      inscricao: input.inscricao ?? null,
+      endereco: input.endereco ?? null,
+      lat,
+      lng,
+      createdAt: t,
+    });
     return rowDemanda(
       (
         await getPool().query('SELECT * FROM demandas WHERE id = $1', [id])

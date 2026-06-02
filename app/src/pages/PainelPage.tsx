@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isApiMode } from '@/api/config';
+import { useInterval } from '@/hooks/useInterval';
+import { useOnline } from '@/hooks/useOnline';
 import type { OrdemServico, OsStatus, Vistoria } from '@/types';
 import { PAINEL_MAP_LEGEND, PainelMap } from '@/components/PainelMap';
 import {
@@ -7,6 +10,7 @@ import {
   getVistoriaForOs,
   homologar,
   listAllOrdens,
+  refreshFromServer,
 } from '@/services/fisavalService';
 
 const STATUS_OPTS: { value: string; label: string }[] = [
@@ -32,8 +36,9 @@ export function PainelPage() {
   const [filtroStatus, setFiltroStatus] = useState('all');
   const [filtroFiscal, setFiltroFiscal] = useState('all');
   const [destaqueId, setDestaqueId] = useState<string | null>(null);
+  const online = useOnline();
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const k = await getKpis();
     setKpis({
       osHoje: k.osHoje,
@@ -52,11 +57,15 @@ export function PainelPage() {
       if (v) vs[o.id] = v;
     }
     setVistorias(vs);
-  }
+  }, []);
 
   useEffect(() => {
     void reload();
-  }, []);
+  }, [reload]);
+
+  useInterval(() => {
+    if (isApiMode() && online) void refreshFromServer().then(() => reload());
+  }, isApiMode() && online ? 30_000 : null);
 
   const fiscaisMap = useMemo(() => {
     const m = new Map<string, string>();

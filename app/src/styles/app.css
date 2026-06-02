@@ -173,6 +173,8 @@ tr.row-highlight td { background: rgba(59, 130, 246, 0.15); }
   background: var(--surface2); color: var(--muted);
 }
 .offline-pill[data-on='true'] { color: var(--ok); }
+.api-pill { margin-left: 0.35rem; }
+.api-pill[data-on='false'] { color: var(--warn); }
 
 .foto-grid {
   display: flex;

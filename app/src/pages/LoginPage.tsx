@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isApiMode } from '@/api/config';
+import { getApiUrl, isApiMode } from '@/api/config';
+import { useApiHealth } from '@/hooks/useApiHealth';
 import { useAuthStore } from '@/store/authStore';
 
 export function LoginPage() {
@@ -9,6 +10,7 @@ export function LoginPage() {
   const [erro, setErro] = useState('');
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
+  const { health, checking } = useApiHealth();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,7 +41,13 @@ export function LoginPage() {
           </button>
         </form>
         <div className="login-hint">
-          {isApiMode() && <p><strong>Modo servidor</strong> — dados na API (compartilhado entre dispositivos)</p>}
+          {isApiMode() && (
+            <p>
+              <strong>Modo servidor</strong> — {getApiUrl()}
+              <br />
+              {checking ? 'Verificando API…' : health?.ok ? `API OK (${health.storage})` : `API offline: ${health?.error ?? '—'}`}
+            </p>
+          )}
           <p><strong>gestor@demo</strong> / demo123 — Painel e demandas</p>
           <p><strong>fiscal@demo</strong> / demo123 — PWA de campo</p>
         </div>

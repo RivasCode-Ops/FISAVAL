@@ -1,6 +1,9 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { isApiMode } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
+import { useApiHealth } from '@/hooks/useApiHealth';
 import { useOnline } from '@/hooks/useOnline';
+import { refreshFromServer } from '@/services/fisavalService';
 
 export function Layout() {
   const session = useAuthStore((s) => s.session);
@@ -8,6 +11,13 @@ export function Layout() {
   const hasRole = useAuthStore((s) => s.hasRole);
   const navigate = useNavigate();
   const online = useOnline();
+  const { health, checking, check } = useApiHealth(60_000);
+  const apiMode = isApiMode();
+
+  async function onRefresh() {
+    const ok = await refreshFromServer();
+    if (ok) window.location.reload();
+  }
 
   if (!session) return null;
 
@@ -19,6 +29,11 @@ export function Layout() {
           <span className="offline-pill" data-on={online ? 'true' : 'false'}>
             {online ? '● Online' : '○ Offline (dados locais)'}
           </span>
+          {apiMode && (
+            <span className="offline-pill api-pill" data-on={health?.ok ? 'true' : 'false'}>
+              {checking ? '… API' : health?.ok ? `● API (${health.storage ?? 'ok'})` : '○ API indisponível'}
+            </span>
+          )}
         </div>
         <nav>
           {hasRole('gestor', 'admin') && (
@@ -28,6 +43,16 @@ export function Layout() {
             </>
           )}
           {hasRole('fiscal') && <NavLink to="/campo">Campo</NavLink>}
+          {apiMode && hasRole('gestor', 'admin') && online && (
+            <button type="button" className="btn btn-sm btn-outline" onClick={() => void onRefresh()}>
+              Atualizar servidor
+            </button>
+          )}
+          {apiMode && (
+            <button type="button" className="btn btn-sm btn-outline" onClick={() => void check()} title="Testar API">
+              ↻
+            </button>
+          )}
           <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{session.nome}</span>
           <button
             type="button"

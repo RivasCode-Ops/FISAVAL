@@ -1,4 +1,4 @@
-import { apiClient, apiFotoBlobUrl, apiPushState, apiUploadFoto } from '@/api/client';
+import { apiClient, apiFotoBlobUrl, apiPushState, apiUploadFoto, hydrateDexieFromApi } from '@/api/client';
 import { isApiMode } from '@/api/config';
 import { db } from '@/db/database';
 import {
@@ -32,6 +32,17 @@ export const CHECKLIST_ITEMS = [
   { id: 'entorno', label: 'Infraestrutura do entorno OK' },
   { id: 'divergencia', label: 'Divergência cadastral identificada' },
 ] as const;
+
+/** Baixa estado atual da API para o IndexedDB (gestor / multi-dispositivo). */
+export async function refreshFromServer(): Promise<boolean> {
+  if (!isApiMode() || !navigator.onLine) return false;
+  try {
+    await hydrateDexieFromApi();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function listDemandas() {
   return db.demandas.orderBy('updatedAt').reverse().toArray();
