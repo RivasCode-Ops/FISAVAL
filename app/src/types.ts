@@ -47,6 +47,7 @@ export interface OrdemServico {
   inscricao: string;
   endereco: string;
   bairro: string;
+  tipo?: string;
   prioridade?: Prioridade;
   prazo?: string;
   visitaInicio?: string;

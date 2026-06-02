@@ -1,4 +1,5 @@
 import { dentroJanelaVisita } from '@/lib/janela';
+import { skillForTipo } from '@/lib/tipoVistoria';
 import type { OrdemServico, Prioridade } from '@/types';
 
 export type GeoPoint = { lat: number; lng: number };
@@ -38,6 +39,7 @@ function daysUntilPrazo(prazo: string): number {
 function urgenciaScore(o: {
   prioridade?: Prioridade;
   prazo?: string;
+  tipo?: string;
   visitaInicio?: string;
   visitaFim?: string;
 }): number {
@@ -59,7 +61,12 @@ export function ordenarPorPrazoEProximidade(ordens: OrdemServico[], start: GeoPo
     const minD = Math.min(...dists);
     const near = rest.filter((_, i) => dists[i] <= minD * 1.5 + 0.05);
     const pool = near.length ? near : rest;
-    pool.sort((a, b) => urgenciaScore(a) - urgenciaScore(b));
+    pool.sort((a, b) => {
+      const sa = skillForTipo(a.tipo);
+      const sb = skillForTipo(b.tipo);
+      if (sa !== sb) return sa - sb;
+      return urgenciaScore(a) - urgenciaScore(b);
+    });
     const next = pool[0];
     rest.splice(rest.indexOf(next), 1);
     out.push(next);

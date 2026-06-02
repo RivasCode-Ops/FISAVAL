@@ -40,6 +40,7 @@ export type OtimizarRotaResult = {
   duracaoMinEst: number;
   engine: 'vroom' | 'prazo-proximidade';
   capacidadeRestante?: number;
+  tiposRota?: string[];
 };
 import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
@@ -196,6 +197,7 @@ export async function gerarOs(
     inscricao: demanda.inscricao ?? '—',
     endereco: demanda.endereco ?? demanda.bairro,
     bairro: demanda.bairro,
+    tipo: demanda.tipo,
     prioridade: demanda.prioridade,
     prazo: demanda.prazo,
     visitaInicio: janela?.visitaInicio,
@@ -238,6 +240,7 @@ export async function otimizarRotaFiscal(
         duracaoMinEst: r.duracaoMinEst,
         engine: r.engine,
         capacidadeRestante: r.capacidadeRestante,
+        tiposRota: r.tiposRota,
       };
     } catch {
       /* fallback local */
@@ -266,6 +269,7 @@ export async function otimizarRotaFiscal(
     distanciaKm: stats.distanciaKm,
     duracaoMinEst: stats.duracaoMinEst,
     engine: 'prazo-proximidade',
+    tiposRota: [...new Set(ordered.map((o) => o.tipo).filter(Boolean))] as string[],
   };
 }
 

@@ -160,7 +160,8 @@ export function CampoPage() {
     } else if (r.paradas) {
       const motor =
         r.engine === 'vroom' ? 'VROOM' : r.engine === 'prazo-proximidade' ? 'prazo+GPS' : r.engine;
-      setRotaResumo(`~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})`);
+      const seq = r.tiposRota?.length ? ` · ${r.tiposRota.join(' → ')}` : '';
+      setRotaResumo(`~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})${seq}`);
       setMsg(`Rota otimizada: ${r.paradas} parada(s).`);
     } else {
       setRotaResumo(null);
@@ -197,6 +198,7 @@ export function CampoPage() {
               <small>{o.endereco}</small>
               <br />
               <span className="badge b-status">#{o.rotaOrdem}</span>{' '}
+              {o.tipo && <span className="badge b-status">{o.tipo}</span>}{' '}
               {o.prioridade && (
                 <span
                   className={`badge ${o.prioridade === 'alta' ? 'b-pri-alta' : o.prioridade === 'media' ? 'b-pri-media' : 'b-pri-baixa'}`}

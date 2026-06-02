@@ -69,6 +69,14 @@ export function createRoutes(): Router {
     }),
   );
 
+  router.get(
+    '/tipos-vistoria',
+    asyncHandler(async (_req, res) => {
+      const { TIPOS_VISTORIA_PADRAO, VROOM_SKILLS_FISCAL } = await import('./tipoVistoria.js');
+      res.json({ tipos: [...TIPOS_VISTORIA_PADRAO], skills: VROOM_SKILLS_FISCAL });
+    }),
+  );
+
   router.use(authRequired);
 
   router.get(

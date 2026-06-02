@@ -44,6 +44,7 @@ export interface OrdemServico {
   inscricao: string;
   endereco: string;
   bairro: string;
+  tipo?: string;
   prioridade?: Prioridade;
   prazo?: string;
   /** Janela de visita (HH:mm local). */

@@ -12,6 +12,7 @@ import {
   printRelatorio,
 } from '@/lib/export';
 import { getRuntimeTenantId } from '@/lib/tenantFilter';
+import { TIPOS_VISTORIA } from '@/lib/tipoVistoria';
 import {
   CHECKLIST_ITEMS,
   getKpis,
@@ -48,6 +49,7 @@ export function PainelPage() {
   const [vistorias, setVistorias] = useState<Record<string, Vistoria>>({});
   const [filtroStatus, setFiltroStatus] = useState('all');
   const [filtroFiscal, setFiltroFiscal] = useState('all');
+  const [filtroTipo, setFiltroTipo] = useState('all');
   const [destaqueId, setDestaqueId] = useState<string | null>(null);
   const [assinaturaUrls, setAssinaturaUrls] = useState<Record<string, string>>({});
   const [rotaFiscalId, setRotaFiscalId] = useState('');
@@ -104,9 +106,10 @@ export function PainelPage() {
     return ordens.filter((o) => {
       if (filtroStatus !== 'all' && o.status !== (filtroStatus as OsStatus)) return false;
       if (filtroFiscal !== 'all' && o.fiscalId !== filtroFiscal) return false;
+      if (filtroTipo !== 'all' && o.tipo !== filtroTipo) return false;
       return true;
     });
-  }, [ordens, filtroStatus, filtroFiscal]);
+  }, [ordens, filtroStatus, filtroFiscal, filtroTipo]);
 
   async function exportCsv(lista: OrdemServico[], suffix: string) {
     const vMap = await getVistoriaMapByOs();
@@ -129,8 +132,9 @@ export function PainelPage() {
       return;
     }
     const motor = r.engine === 'vroom' ? 'VROOM' : 'prazo+GPS';
+    const seq = r.tiposRota?.length ? ` · ${r.tiposRota.join(' → ')}` : '';
     setRotaGestorMsg(
-      `${r.paradas} parada(s) · ~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})`,
+      `${r.paradas} parada(s) · ~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})${seq}`,
     );
     await reload();
   }
@@ -256,6 +260,17 @@ export function PainelPage() {
               {fiscaisMap.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Tipo
+            <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
+              <option value="all">Todos</option>
+              {TIPOS_VISTORIA.map((t) => (
+                <option key={t} value={t}>
+                  {t}
                 </option>
               ))}
             </select>

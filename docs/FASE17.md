@@ -54,6 +54,6 @@ TENANTS=demo:Prefeitura de Exemplo;paulinia-sp:Prefeitura de Paulínia
 
 ## Próximo
 
+- Tipo de vistoria + skills VROOM — ver [FASE18.md](FASE18.md)
 - Assinatura ICP-Brasil / gov.br
-- Skills VROOM por tipo de vistoria (Revisão vs Denúncia)
 - Painel super-admin cross-tenant

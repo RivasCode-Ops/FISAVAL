@@ -1,4 +1,5 @@
 import { vroomTimeWindow } from './janela.js';
+import { skillForTipo, VROOM_SKILLS_FISCAL } from './tipoVistoria.js';
 import type { GeoPoint } from './rota.js';
 import type { OrdemServico } from './types.js';
 
@@ -11,9 +12,15 @@ export async function ordenarComVroom(
 ): Promise<number[] | null> {
   if (ordens.length < 2) return null;
   const url = baseUrl.replace(/\/$/, '');
-  const vehicle: { id: number; start: [number, number]; capacity?: number[] } = {
+  const vehicle: {
+    id: number;
+    start: [number, number];
+    skills: number[];
+    capacity?: number[];
+  } = {
     id: 1,
     start: [start.lng, start.lat],
+    skills: VROOM_SKILLS_FISCAL,
   };
   if (vehicleCapacity != null && vehicleCapacity > 0) {
     vehicle.capacity = [vehicleCapacity];
@@ -21,9 +28,15 @@ export async function ordenarComVroom(
   const body = {
     vehicles: [vehicle],
     jobs: ordens.map((o, i) => {
-      const job: { id: number; location: [number, number]; time_windows?: [number, number][] } = {
+      const job: {
+        id: number;
+        location: [number, number];
+        skills: number[];
+        time_windows?: [number, number][];
+      } = {
         id: i + 1,
         location: [o.lng, o.lat],
+        skills: [skillForTipo(o.tipo)],
       };
       const tw = vroomTimeWindow(o.visitaInicio, o.visitaFim);
       if (tw) job.time_windows = tw;

@@ -42,6 +42,7 @@ export async function initPgSchema() {
     pgHasGeom = false;
   }
   await p.query('ALTER TABLE demandas ADD COLUMN IF NOT EXISTS tenant_id TEXT');
+  await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS tipo TEXT');
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS prioridade TEXT');
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS prazo TEXT');
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS visita_inicio TEXT');
@@ -148,6 +149,7 @@ function rowOrdem(r: Record<string, unknown>): OrdemServico {
     inscricao: r.inscricao as string,
     endereco: r.endereco as string,
     bairro: r.bairro as string,
+    tipo: (r.tipo as string) ?? undefined,
     prioridade: (r.prioridade as Prioridade) ?? undefined,
     prazo: (r.prazo as string) ?? undefined,
     visitaInicio: (r.visita_inicio as string) ?? undefined,
@@ -221,8 +223,8 @@ export async function seedPg() {
     createdAt: t,
   });
   await getPool().query(
-    `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, status, lat, lng, rota_ordem, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,1,$13,$13)`,
+    `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, tipo, prioridade, prazo, status, lat, lng, rota_ordem, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,1,$14,$14)`,
     [
       'OS-8821',
       'D-1042',
@@ -231,6 +233,7 @@ export async function seedPg() {
       '12.034.0056.0001',
       'R. das Flores, 123',
       'Centro',
+      'Revisão cadastral',
       'alta',
       '2026-06-05',
       'atribuida',
@@ -298,8 +301,8 @@ export const pgRepo = {
         await client.query('DELETE FROM ordens');
         for (const x of partial.ordens) {
           await client.query(
-            `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, visita_inicio, visita_fim, status, lat, lng, rota_ordem, created_at, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+            `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, tipo, prioridade, prazo, visita_inicio, visita_fim, status, lat, lng, rota_ordem, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
             [
               x.id,
               x.demandaId,
@@ -308,6 +311,7 @@ export const pgRepo = {
               x.inscricao,
               x.endereco,
               x.bairro,
+              x.tipo ?? null,
               x.prioridade ?? null,
               x.prazo ?? null,
               x.visitaInicio ?? null,
@@ -420,8 +424,8 @@ export const pgRepo = {
       [fiscalId],
     );
     await getPool().query(
-      `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, visita_inicio, visita_fim, status, lat, lng, rota_ordem, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'atribuida',$12,$13,$14,$15,$15)`,
+      `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, tipo, prioridade, prazo, visita_inicio, visita_fim, status, lat, lng, rota_ordem, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'atribuida',$13,$14,$15,$16,$16)`,
       [
         id,
         demandaId,
@@ -430,6 +434,7 @@ export const pgRepo = {
         dem.inscricao ?? '—',
         dem.endereco ?? dem.bairro,
         dem.bairro,
+        demRow.tipo,
         demRow.prioridade,
         demRow.prazo,
         janela?.visitaInicio ?? null,
@@ -551,6 +556,7 @@ export const pgRepo = {
       engine,
       visitasHoje,
       capacidadeRestante: config.maxVisitasDiaFiscal > 0 ? capRestante : undefined,
+      tiposRota: [...new Set(ordered.map((o) => o.tipo).filter(Boolean))] as string[],
     };
   },
   async homologar(id: string, aprovado: boolean) {

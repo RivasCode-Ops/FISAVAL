@@ -150,6 +150,7 @@ export const apiClient = {
       engine: 'vroom' | 'prazo-proximidade';
       visitasHoje?: number;
       capacidadeRestante?: number;
+      tiposRota?: string[];
     }>('/ordens/otimizar-rota', {
       method: 'POST',
       body: JSON.stringify({

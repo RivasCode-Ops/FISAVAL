@@ -201,6 +201,7 @@ export const jsonRepo = {
       inscricao: demanda.inscricao ?? '—',
       endereco: demanda.endereco ?? demanda.bairro,
       bairro: demanda.bairro,
+      tipo: demanda.tipo,
       prioridade: demanda.prioridade,
       prazo: demanda.prazo,
       visitaInicio: janela?.visitaInicio,
@@ -317,6 +318,7 @@ export const jsonRepo = {
       engine,
       visitasHoje,
       capacidadeRestante: config.maxVisitasDiaFiscal > 0 ? capRestante : undefined,
+      tiposRota: [...new Set(ordered.map((o) => o.tipo).filter(Boolean))] as string[],
     };
   },
   async homologar(id: string, aprovado: boolean) {

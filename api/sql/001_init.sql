@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS ordens (
   inscricao TEXT NOT NULL,
   endereco TEXT NOT NULL,
   bairro TEXT NOT NULL,
+  tipo TEXT,
   prioridade TEXT,
   prazo TEXT,
   visita_inicio TEXT,

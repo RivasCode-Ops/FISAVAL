@@ -67,6 +67,7 @@ export async function ensureSeed(): Promise<void> {
       inscricao: '12.034.0056.0001',
       endereco: 'R. das Flores, 123',
       bairro: 'Centro',
+      tipo: 'Revisão cadastral',
       prioridade: 'alta',
       prazo: '2026-06-05',
       status: 'atribuida',
