@@ -145,6 +145,8 @@ export const apiClient = {
       distanciaKm: number;
       duracaoMinEst: number;
       engine: 'vroom' | 'prazo-proximidade';
+      visitasHoje?: number;
+      capacidadeRestante?: number;
     }>('/ordens/otimizar-rota', {
       method: 'POST',
       body: JSON.stringify({
@@ -161,5 +163,14 @@ export const apiClient = {
     api<Vistoria>(`/vistorias/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   listFotos: (vistoriaId: string) => api<VistoriaFoto[]>(`/vistorias/${vistoriaId}/fotos`),
   listFiscais: () => api<{ id: string; nome: string; email: string; role: string }[]>('/fiscais'),
-  getKpis: () => api<{ osHoje: number; concluidas: number; homolog: number; divergencias: number; fiscais: User[] }>('/kpis'),
+  getKpis: () =>
+    api<{
+      osHoje: number;
+      concluidas: number;
+      homolog: number;
+      divergencias: number;
+      visitasHoje: number;
+      prazoVencido: number;
+      fiscais: User[];
+    }>('/kpis'),
 };

@@ -7,11 +7,19 @@ export async function ordenarComVroom(
   baseUrl: string,
   start: GeoPoint,
   ordens: OrdemServico[],
+  vehicleCapacity?: number,
 ): Promise<number[] | null> {
   if (ordens.length < 2) return null;
   const url = baseUrl.replace(/\/$/, '');
+  const vehicle: { id: number; start: [number, number]; capacity?: number[] } = {
+    id: 1,
+    start: [start.lng, start.lat],
+  };
+  if (vehicleCapacity != null && vehicleCapacity > 0) {
+    vehicle.capacity = [vehicleCapacity];
+  }
   const body = {
-    vehicles: [{ id: 1, start: [start.lng, start.lat] }],
+    vehicles: [vehicle],
     jobs: ordens.map((o, i) => {
       const job: { id: number; location: [number, number]; time_windows?: [number, number][] } = {
         id: i + 1,

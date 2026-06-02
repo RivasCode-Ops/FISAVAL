@@ -30,6 +30,8 @@ app.get('/api/fisaval/config', (_req, res) => {
     vroom: !!config.vroomUrl,
     checkinRadiusM: config.checkinRadiusM,
     maxOsAtivasFiscal: config.maxOsAtivasFiscal,
+    maxVisitasDiaFiscal: config.maxVisitasDiaFiscal,
+    tenantIsolated: process.env.TENANT_ISOLATED !== '0' && process.env.TENANT_ISOLATED !== 'false',
   });
 });
 
@@ -39,7 +41,10 @@ async function main() {
   await ensureStorage();
   app.listen(config.port, () => {
     console.log(`FISAVAL API http://127.0.0.1:${config.port}`);
-    console.log(`  Storage: ${usePostgres() ? 'PostgreSQL/PostGIS' : 'JSON (api/data/fisaval.json)'}`);
+    const storage = usePostgres()
+      ? 'PostgreSQL/PostGIS'
+      : `JSON (tenant: ${config.tenantId})`;
+    console.log(`  Storage: ${storage}`);
     console.log(`  POST /api/fisaval/auth/login → JWT`);
     console.log(`  POST /api/fisaval/vistorias/:id/fotos`);
   });

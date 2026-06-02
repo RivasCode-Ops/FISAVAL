@@ -4,13 +4,16 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { config } from './config.js';
 import {
+  daysUntilPrazo,
   estimateRotaStats,
   filtrarOsAtivas,
   ordenarPorPrazoEProximidade,
   type GeoPoint,
 } from './rota.js';
 import { matchesTenant } from './tenant.js';
+import { countVisitasHoje } from './fiscal.js';
 import { ordenarComVroom } from './vroom.js';
+import { tenantUploadsDir } from './tenantPaths.js';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 import { uid } from './jsonRepo.js';
 
@@ -405,6 +408,10 @@ export const pgRepo = {
       const ativas = filtrarOsAtivas(await pgRepo.listOrdens(fiscalId));
       if (ativas.length >= config.maxOsAtivasFiscal) return null;
     }
+    if (config.maxVisitasDiaFiscal > 0) {
+      const visitas = await pgRepo.countVisitasHojeFiscal(fiscalId);
+      if (visitas >= config.maxVisitasDiaFiscal) return null;
+    }
     const t = now();
     const id = uid('OS');
     const { rows: cnt } = await getPool().query(
@@ -476,16 +483,43 @@ export const pgRepo = {
     const { rows } = await getPool().query('SELECT * FROM ordens WHERE id = $1', [id]);
     return rows[0] ? rowOrdem(rows[0]) : null;
   },
+  async countVisitasHojeFiscal(fiscalId: string) {
+    const hoje = now().slice(0, 10);
+    const { rows } = await getPool().query(
+      `SELECT COUNT(*)::int AS c FROM vistorias v
+       JOIN ordens o ON o.id = v.os_id
+       WHERE o.fiscal_id = $1 AND v.concluida_at::text LIKE $2 || '%'`,
+      [fiscalId, hoje],
+    );
+    return rows[0].c as number;
+  },
   async otimizarRota(fiscalId: string, start?: GeoPoint) {
     const ativas = filtrarOsAtivas(await pgRepo.listOrdens(fiscalId));
     if (!ativas.length) {
       return { ordens: [], paradas: 0, distanciaKm: 0, duracaoMinEst: 0, engine: 'prazo-proximidade' as const };
     }
+    const visitasHoje = await pgRepo.countVisitasHojeFiscal(fiscalId);
+    const capRestante =
+      config.maxVisitasDiaFiscal > 0
+        ? Math.max(0, config.maxVisitasDiaFiscal - visitasHoje)
+        : ativas.length;
+    if (config.maxVisitasDiaFiscal > 0 && capRestante === 0) {
+      return {
+        ordens: [],
+        paradas: 0,
+        distanciaKm: 0,
+        duracaoMinEst: 0,
+        engine: 'prazo-proximidade' as const,
+        visitasHoje,
+        capacidadeRestante: 0,
+      };
+    }
     const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
     let ordered: OrdemServico[];
     let engine: 'vroom' | 'prazo-proximidade' = 'prazo-proximidade';
+    const vroomCap = config.maxVisitasDiaFiscal > 0 ? capRestante : undefined;
     if (config.vroomUrl && ativas.length >= 2) {
-      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas);
+      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas, vroomCap);
       if (idx) {
         ordered = idx.map((i) => ativas[i]);
         engine = 'vroom';
@@ -494,6 +528,9 @@ export const pgRepo = {
       }
     } else {
       ordered = ativas.length >= 2 ? ordenarPorPrazoEProximidade(ativas, origin) : ativas;
+    }
+    if (config.maxVisitasDiaFiscal > 0) {
+      ordered = ordered.slice(0, capRestante);
     }
     const stats = estimateRotaStats(ordered, origin);
     const t = now();
@@ -511,6 +548,8 @@ export const pgRepo = {
       distanciaKm: stats.distanciaKm,
       duracaoMinEst: stats.duracaoMinEst,
       engine,
+      visitasHoje,
+      capacidadeRestante: config.maxVisitasDiaFiscal > 0 ? capRestante : undefined,
     };
   },
   async homologar(id: string, aprovado: boolean) {
@@ -575,13 +614,13 @@ export const pgRepo = {
     return merged;
   },
   assinaturaPath(vistoriaId: string) {
-    return join(config.uploadsDir, vistoriaId, 'assinatura.png');
+    return join(tenantUploadsDir(), vistoriaId, 'assinatura.png');
   },
   hasAssinatura(vistoriaId: string) {
     return existsSync(this.assinaturaPath(vistoriaId));
   },
   async saveAssinatura(vistoriaId: string, fiscalNome: string, buffer: Buffer) {
-    mkdirSync(join(config.uploadsDir, vistoriaId), { recursive: true });
+    mkdirSync(join(tenantUploadsDir(), vistoriaId), { recursive: true });
     writeFileSync(this.assinaturaPath(vistoriaId), buffer);
     return this.patchVistoria(vistoriaId, {
       assinaturaAt: now(),
@@ -613,8 +652,14 @@ export const pgRepo = {
   async getKpis() {
     const hoje = now().slice(0, 10);
     const { rows: ordens } = await getPool().query(
-      `SELECT o.status, o.created_at, o.id FROM ordens o WHERE ${tenantOrdemWhere('$1')}`,
+      `SELECT o.status, o.created_at, o.id, o.prazo FROM ordens o WHERE ${tenantOrdemWhere('$1')}`,
       [config.tenantId],
+    );
+    const { rows: visitasRows } = await getPool().query(
+      `SELECT COUNT(*)::int AS c FROM vistorias v
+       JOIN ordens o ON o.id = v.os_id
+       WHERE ${tenantOrdemWhere('$1')} AND v.concluida_at::text LIKE $2 || '%'`,
+      [config.tenantId, hoje],
     );
     const { rows: vistorias } = await getPool().query(
       `SELECT v.divergencia FROM vistorias v
@@ -631,6 +676,15 @@ export const pgRepo = {
       ).length,
       homolog: ordens.filter((o) => o.status === 'homologacao').length,
       divergencias: vistorias.filter((v) => v.divergencia).length,
+      visitasHoje: visitasRows[0].c as number,
+      prazoVencido: ordens.filter(
+        (o) =>
+          ['atribuida', 'em_campo', 'check_in', 'em_vistoria', 'pendente_sync', 'interrompida'].includes(
+            o.status as string,
+          ) &&
+          o.prazo &&
+          daysUntilPrazo(String(o.prazo)) < 0,
+      ).length,
       fiscais,
     };
   },

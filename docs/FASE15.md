@@ -25,6 +25,6 @@
 
 ## Próximo
 
-- Banco isolado por tenant
+- Tenant isolado + capacidade diária — ver [FASE16.md](FASE16.md)
 - Assinatura ICP-Brasil
-- Capacidade diária do fiscal no VROOM (skills)
+- Skills VROOM por tipo de vistoria

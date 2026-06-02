@@ -30,6 +30,7 @@ import {
   estimateRotaStats,
   filtrarOsAtivas,
   ordenarPorPrazoEProximidade,
+  prazoVencido,
   type GeoPoint,
 } from '@/lib/rota';
 
@@ -38,6 +39,7 @@ export type OtimizarRotaResult = {
   distanciaKm: number;
   duracaoMinEst: number;
   engine: 'vroom' | 'prazo-proximidade';
+  capacidadeRestante?: number;
 };
 import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
@@ -235,6 +237,7 @@ export async function otimizarRotaFiscal(
         distanciaKm: r.distanciaKm,
         duracaoMinEst: r.duracaoMinEst,
         engine: r.engine,
+        capacidadeRestante: r.capacidadeRestante,
       };
     } catch {
       /* fallback local */
@@ -511,7 +514,17 @@ export async function getKpis() {
   const vistorias = await db.vistorias.toArray();
   const divergencias = vistorias.filter((v) => v.divergencia && osIds.has(v.osId)).length;
   const fiscais = await db.users.where('role').equals('fiscal').toArray();
-  return { osHoje: osHoje || ordens.length, concluidas, homolog, divergencias, fiscais };
+  const visitasHoje = vistorias.filter((v) => osIds.has(v.osId) && v.concluidaAt?.startsWith(hoje)).length;
+  const prazoVencidoCount = filtrarOsAtivas(ordens).filter((o) => o.prazo && prazoVencido(o.prazo)).length;
+  return {
+    osHoje: osHoje || ordens.length,
+    concluidas,
+    homolog,
+    divergencias,
+    visitasHoje,
+    prazoVencido: prazoVencidoCount,
+    fiscais,
+  };
 }
 
 export async function listFiscais() {

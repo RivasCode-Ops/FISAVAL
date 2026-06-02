@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { config } from './config.js';
+import { tenantAuditPath, tenantDataDir } from './tenantPaths.js';
 import { uid } from './jsonRepo.js';
 
 export interface AuditEntry {
@@ -17,7 +17,7 @@ export interface AuditEntry {
 }
 
 const MAX_ENTRIES = 2000;
-const auditPath = () => join(config.dataDir, 'audit-log.json');
+const auditPath = () => tenantAuditPath();
 
 function load(): AuditEntry[] {
   const p = auditPath();
@@ -30,7 +30,7 @@ function load(): AuditEntry[] {
 }
 
 function save(entries: AuditEntry[]) {
-  mkdirSync(config.dataDir, { recursive: true });
+  mkdirSync(tenantDataDir(), { recursive: true });
   writeFileSync(auditPath(), JSON.stringify(entries.slice(0, MAX_ENTRIES), null, 2), 'utf8');
 }
 

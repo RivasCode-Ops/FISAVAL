@@ -1,7 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './config.js';
+import { countVisitasHoje } from './fiscal.js';
+import { migrateLegacyTenantData, tenantDataDir, tenantDbPath, tenantUploadsDir } from './tenantPaths.js';
 import {
+  daysUntilPrazo,
   estimateRotaStats,
   filtrarOsAtivas,
   ordenarPorPrazoEProximidade,
@@ -13,7 +16,7 @@ import { ordenarComVroom } from './vroom.js';
 import type { ImportRow } from './importCsv.js';
 import type { DbShape, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 
-const dbPath = join(config.dataDir, 'fisaval.json');
+const dbPath = () => tenantDbPath();
 
 const now = () => new Date().toISOString();
 export const uid = (p: string) => `${p}-${Date.now().toString(36)}`;
@@ -23,15 +26,16 @@ function empty(): DbShape {
 }
 
 export function loadDb(): DbShape {
-  if (!existsSync(dbPath)) return empty();
-  const raw = JSON.parse(readFileSync(dbPath, 'utf8')) as DbShape;
+  const p = dbPath();
+  if (!existsSync(p)) return empty();
+  const raw = JSON.parse(readFileSync(p, 'utf8')) as DbShape;
   if (!raw.fotos) raw.fotos = [];
   return raw;
 }
 
 export function saveDb(db: DbShape) {
-  mkdirSync(config.dataDir, { recursive: true });
-  writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
+  mkdirSync(tenantDataDir(), { recursive: true });
+  writeFileSync(dbPath(), JSON.stringify(db, null, 2), 'utf8');
 }
 
 export function seedJson(): DbShape {
@@ -102,6 +106,7 @@ export function seedJson(): DbShape {
 export const jsonRepo = {
   mode: 'json' as const,
   async ensureSeed() {
+    migrateLegacyTenantData();
     return seedJson();
   },
   async login(email: string, senha: string) {
@@ -182,6 +187,10 @@ export const jsonRepo = {
       );
       if (ativas.length >= config.maxOsAtivasFiscal) return null;
     }
+    if (config.maxVisitasDiaFiscal > 0) {
+      const visitas = countVisitasHoje(db.ordens, db.vistorias, fiscalId);
+      if (visitas >= config.maxVisitasDiaFiscal) return null;
+    }
     const t = now();
     const os: OrdemServico = {
       id: uid('OS'),
@@ -250,11 +259,28 @@ export const jsonRepo = {
         engine: 'prazo-proximidade' as const,
       };
     }
+    const visitasHoje = countVisitasHoje(db.ordens, db.vistorias, fiscalId);
+    const capRestante =
+      config.maxVisitasDiaFiscal > 0
+        ? Math.max(0, config.maxVisitasDiaFiscal - visitasHoje)
+        : ativas.length;
+    if (config.maxVisitasDiaFiscal > 0 && capRestante === 0) {
+      return {
+        ordens: [],
+        paradas: 0,
+        distanciaKm: 0,
+        duracaoMinEst: 0,
+        engine: 'prazo-proximidade' as const,
+        visitasHoje,
+        capacidadeRestante: 0,
+      };
+    }
     const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
     let ordered: OrdemServico[];
     let engine: 'vroom' | 'prazo-proximidade' = 'prazo-proximidade';
+    const vroomCap = config.maxVisitasDiaFiscal > 0 ? capRestante : undefined;
     if (config.vroomUrl && ativas.length >= 2) {
-      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas);
+      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas, vroomCap);
       if (idx) {
         ordered = idx.map((i) => ativas[i]);
         engine = 'vroom';
@@ -263,6 +289,9 @@ export const jsonRepo = {
       }
     } else {
       ordered = ativas.length >= 2 ? ordenarPorPrazoEProximidade(ativas, origin) : ativas;
+    }
+    if (config.maxVisitasDiaFiscal > 0) {
+      ordered = ordered.slice(0, capRestante);
     }
     const stats = estimateRotaStats(ordered, origin);
     const t = now();
@@ -285,6 +314,8 @@ export const jsonRepo = {
       distanciaKm: stats.distanciaKm,
       duracaoMinEst: stats.duracaoMinEst,
       engine,
+      visitasHoje,
+      capacidadeRestante: config.maxVisitasDiaFiscal > 0 ? capRestante : undefined,
     };
   },
   async homologar(id: string, aprovado: boolean) {
@@ -341,7 +372,7 @@ export const jsonRepo = {
     return loadDb().fotos.find((f) => f.id === id) ?? null;
   },
   assinaturaPath(vistoriaId: string) {
-    return join(config.uploadsDir, vistoriaId, 'assinatura.png');
+    return join(tenantUploadsDir(), vistoriaId, 'assinatura.png');
   },
   hasAssinatura(vistoriaId: string) {
     return existsSync(this.assinaturaPath(vistoriaId));
@@ -349,12 +380,16 @@ export const jsonRepo = {
   async saveAssinatura(vistoriaId: string, fiscalNome: string, buffer: Buffer) {
     const t = now();
     const p = this.assinaturaPath(vistoriaId);
-    mkdirSync(join(config.uploadsDir, vistoriaId), { recursive: true });
+    mkdirSync(join(tenantUploadsDir(), vistoriaId), { recursive: true });
     writeFileSync(p, buffer);
     return this.patchVistoria(vistoriaId, { assinaturaAt: t, assinaturaNome: fiscalNome });
   },
   async listFiscais() {
     return loadDb().users.filter((u) => u.role === 'fiscal').map(({ senha: _, ...u }) => u);
+  },
+  async countVisitasHojeFiscal(fiscalId: string) {
+    const db = loadDb();
+    return countVisitasHoje(db.ordens, db.vistorias, fiscalId);
   },
   async getKpis() {
     const db = loadDb();
@@ -368,6 +403,11 @@ export const jsonRepo = {
       ).length,
       homolog: ordens.filter((o) => o.status === 'homologacao').length,
       divergencias: db.vistorias.filter((v) => v.divergencia && osIds.has(v.osId)).length,
+      visitasHoje: countVisitasHoje(db.ordens, db.vistorias),
+      prazoVencido: ordens.filter(
+        (o) =>
+          filtrarOsAtivas([o]).length > 0 && o.prazo && daysUntilPrazo(o.prazo) < 0,
+      ).length,
       fiscais: db.users.filter((u) => u.role === 'fiscal'),
     };
   },

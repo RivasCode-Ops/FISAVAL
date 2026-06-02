@@ -14,6 +14,7 @@ import { logAudit, listAudit } from './audit.js';
 import { parseDemandasCsv } from './importCsv.js';
 import { config } from './config.js';
 import { isHhmm } from './janela.js';
+import { tenantUploadsDir } from './tenantPaths.js';
 import { getRepo } from './repo.js';
 import { uid } from './jsonRepo.js';
 import type { AuthPayload } from './auth.js';
@@ -38,7 +39,7 @@ function asyncHandler(
 
 export function createRoutes(): Router {
   const router = Router();
-  mkdirSync(config.uploadsDir, { recursive: true });
+  mkdirSync(tenantUploadsDir(), { recursive: true });
 
   router.post(
     '/auth/login',
@@ -157,6 +158,17 @@ export function createRoutes(): Router {
         if (filtrarOsAtivas(ordensFiscal).length >= config.maxOsAtivasFiscal) {
           res.status(409).json({
             error: `Limite de ${config.maxOsAtivasFiscal} OS ativas por fiscal atingido`,
+          });
+          return;
+        }
+      }
+      if (config.maxVisitasDiaFiscal > 0 && 'countVisitasHojeFiscal' in repo) {
+        const visitas = await (
+          repo as { countVisitasHojeFiscal: (id: string) => Promise<number> }
+        ).countVisitasHojeFiscal(fiscalId);
+        if (visitas >= config.maxVisitasDiaFiscal) {
+          res.status(409).json({
+            error: `Limite de ${config.maxVisitasDiaFiscal} visitas concluídas hoje por fiscal`,
           });
           return;
         }
@@ -293,7 +305,7 @@ export function createRoutes(): Router {
       const fotoId = uid('F');
       const ext = req.file.mimetype.includes('png') ? 'png' : 'jpg';
       const filename = `${fotoId}.${ext}`;
-      const dir = join(config.uploadsDir, vistoriaId);
+      const dir = join(tenantUploadsDir(), vistoriaId);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, filename), req.file.buffer);
       const foto = await getRepo().addFoto({
@@ -348,7 +360,7 @@ export function createRoutes(): Router {
       const path =
         'assinaturaPath' in repo
           ? (repo as { assinaturaPath: (id: string) => string }).assinaturaPath(req.params.id)
-          : join(config.uploadsDir, req.params.id, 'assinatura.png');
+          : join(tenantUploadsDir(), req.params.id, 'assinatura.png');
       if (!existsSync(path)) {
         res.status(404).json({ error: 'Assinatura não encontrada' });
         return;
@@ -366,7 +378,7 @@ export function createRoutes(): Router {
         res.status(404).json({ error: 'Foto não encontrada' });
         return;
       }
-      const filePath = resolve(config.uploadsDir, foto.vistoriaId, foto.filename);
+      const filePath = resolve(tenantUploadsDir(), foto.vistoriaId, foto.filename);
       if (!existsSync(filePath)) {
         res.status(404).json({ error: 'Arquivo ausente' });
         return;

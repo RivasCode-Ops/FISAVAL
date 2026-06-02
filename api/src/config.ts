@@ -23,6 +23,8 @@ export const config = {
   checkinRadiusM: Number(process.env.CHECKIN_RADIUS_M) || 200,
   /** Máximo de OS ativas por fiscal; 0 = sem limite. */
   maxOsAtivasFiscal: Number(process.env.MAX_OS_ATIVAS_FISCAL) || 0,
+  /** Máximo de vistorias concluídas por fiscal por dia; 0 = sem limite. */
+  maxVisitasDiaFiscal: Number(process.env.MAX_VISITAS_DIA_FISCAL) || 0,
 };
 
 export const usePostgres = () => !!config.databaseUrl;

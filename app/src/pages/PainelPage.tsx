@@ -39,6 +39,8 @@ export function PainelPage() {
     concluidas: 0,
     homolog: 0,
     divergencias: 0,
+    visitasHoje: 0,
+    prazoVencido: 0,
     fiscais: [] as { nome: string; id: string }[],
   });
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
@@ -59,6 +61,8 @@ export function PainelPage() {
       concluidas: k.concluidas,
       homolog: k.homolog,
       divergencias: k.divergencias,
+      visitasHoje: k.visitasHoje ?? 0,
+      prazoVencido: k.prazoVencido ?? 0,
       fiscais: k.fiscais.map((f) => ({ id: f.id, nome: f.nome })),
     });
     const all = await listAllOrdens();
@@ -116,6 +120,10 @@ export function PainelPage() {
       return;
     }
     const r = await otimizarRotaFiscal(rotaFiscalId);
+    if (r.capacidadeRestante === 0) {
+      setRotaGestorMsg('Capacidade diária de visitas esgotada para este fiscal.');
+      return;
+    }
     if (!r.paradas) {
       setRotaGestorMsg('Nenhuma OS ativa para este fiscal.');
       return;
@@ -157,6 +165,12 @@ export function PainelPage() {
         </div>
         <div className="kpi">
           <strong>{kpis.divergencias}</strong>Divergências
+        </div>
+        <div className="kpi">
+          <strong>{kpis.visitasHoje}</strong>Visitas hoje
+        </div>
+        <div className="kpi">
+          <strong>{kpis.prazoVencido}</strong>Prazo vencido
         </div>
       </div>
 

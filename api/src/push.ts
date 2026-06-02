@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import webpush from 'web-push';
 import { config } from './config.js';
+import { tenantDataDir, tenantPushSubsPath } from './tenantPaths.js';
 
 export type PushSubscriptionRow = {
   fiscalId: string;
@@ -10,7 +11,7 @@ export type PushSubscriptionRow = {
   createdAt: string;
 };
 
-const subsPath = () => join(config.dataDir, 'push-subs.json');
+const subsPath = () => tenantPushSubsPath();
 
 function loadSubs(): PushSubscriptionRow[] {
   const p = subsPath();
@@ -23,7 +24,7 @@ function loadSubs(): PushSubscriptionRow[] {
 }
 
 function saveSubs(rows: PushSubscriptionRow[]) {
-  mkdirSync(config.dataDir, { recursive: true });
+  mkdirSync(tenantDataDir(), { recursive: true });
   writeFileSync(subsPath(), JSON.stringify(rows, null, 2), 'utf8');
 }
 

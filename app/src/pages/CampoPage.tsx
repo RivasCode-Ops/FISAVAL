@@ -154,7 +154,10 @@ export function CampoPage() {
     });
     const start = pos ? { lat: pos.coords.latitude, lng: pos.coords.longitude } : undefined;
     const r = await otimizarRotaFiscal(session.userId, start);
-    if (r.paradas) {
+    if (r.capacidadeRestante === 0) {
+      setRotaResumo(null);
+      setMsg('Capacidade diária de visitas esgotada.');
+    } else if (r.paradas) {
       const motor =
         r.engine === 'vroom' ? 'VROOM' : r.engine === 'prazo-proximidade' ? 'prazo+GPS' : r.engine;
       setRotaResumo(`~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})`);
