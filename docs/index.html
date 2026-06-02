@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Demo E-FISCAL — fiscalização imobiliária municipal (piloto online)" />
+  <meta name="theme-color" content="#0f1419" />
+  <title>E-FISCAL — Demo online</title>
+  <link rel="stylesheet" href="css/demo.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+</head>
+<body>
+  <div class="demo-banner">
+    <strong>DEMONSTRAÇÃO</strong> — dados fictícios, sem servidor. Após aprovação, versão completa com banco e sync real.
+  </div>
+
+  <div class="shell">
+    <header class="demo-header">
+      <div>
+        <h1>E-FISCAL</h1>
+        <p>Fiscalização imobiliária municipal — piloto navegável</p>
+      </div>
+      <nav class="nav-tabs" aria-label="Módulos">
+        <button type="button" data-tab="inicio" class="active">Início</button>
+        <button type="button" data-tab="demanda">Demandas</button>
+        <button type="button" data-tab="campo">PWA Campo</button>
+        <button type="button" data-tab="painel">Painel gestor</button>
+      </nav>
+    </header>
+
+    <!-- INÍCIO -->
+    <section id="panel-inicio" class="panel active">
+      <div class="card">
+        <h2 style="margin-top:0">O que testar aqui</h2>
+        <ul>
+          <li><strong>Demandas</strong> — fila com prioridade, bairro e prazo</li>
+          <li><strong>PWA Campo</strong> — lista de OS, mapa, checklist (salva no navegador = simula offline)</li>
+          <li><strong>Painel</strong> — indicadores e situação dos fiscais</li>
+        </ul>
+        <p style="color:var(--muted);font-size:0.9rem">
+          Publicado no GitHub Pages — zero configuração de servidor. Um clique nas abas acima.
+        </p>
+        <button type="button" class="btn" onclick="document.querySelector('[data-tab=campo]').click()">
+          Abrir simulação de campo
+        </button>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Plano Local (piloto)</h3>
+          <p style="color:var(--muted);font-size:0.9rem">Homologação, poucos usuários, validação em 1–2 bairros.</p>
+        </div>
+        <div class="card">
+          <h3>Plano Produção</h3>
+          <p style="color:var(--muted);font-size:0.9rem">Operação plena, roteirização, homologação cadastral, integrações.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- DEMANDAS -->
+    <section id="panel-demanda" class="panel">
+      <div class="card">
+        <h2 style="margin-top:0">Módulo de demanda</h2>
+        <p style="color:var(--muted);font-size:0.9rem">Geração de OS e atribuição ao fiscal — preview estático.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Tipo</th><th>Bairro</th><th>Prioridade</th><th>Prazo</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="demandas-body"></tbody>
+        </table>
+        <p style="margin-top:1rem">
+          <button type="button" class="btn btn-outline" disabled>Gerar OS em lote (produção)</button>
+        </p>
+      </div>
+    </section>
+
+    <!-- CAMPO -->
+    <section id="panel-campo" class="panel">
+      <div class="phone-wrap">
+        <div class="phone">
+          <div class="phone-status">
+            <span>Fiscal: Ana Silva</span>
+            <span id="sync-badge" class="badge badge-sync" style="display:none">Sync pendente</span>
+          </div>
+          <div class="phone-body">
+            <div id="os-list"></div>
+            <hr style="border-color:var(--border)" />
+            <div id="os-detail"></div>
+            <div id="map-campo"></div>
+            <button type="button" class="btn" id="btn-checkin" style="width:100%;margin-bottom:0.5rem">Check-in GPS</button>
+            <div id="checklist" class="checklist"></div>
+            <button type="button" class="btn btn-outline" id="btn-foto" style="width:100%;margin:0.5rem 0">Adicionar foto</button>
+            <button type="button" class="btn" id="btn-sync" style="width:100%">Sincronizar</button>
+          </div>
+        </div>
+      </div>
+      <p style="text-align:center;color:var(--muted);font-size:0.85rem;margin-top:1rem">
+        Marque o checklist e feche o navegador: ao voltar, os dados continuam (localStorage = demo de offline).
+      </p>
+    </section>
+
+    <!-- PAINEL -->
+    <section id="panel-painel" class="panel">
+      <div class="kpi-row">
+        <div class="kpi"><strong id="kpi-os">—</strong>OS hoje</div>
+        <div class="kpi"><strong id="kpi-ok">—</strong>Concluídas</div>
+        <div class="kpi"><strong id="kpi-tempo">—</strong>Tempo médio</div>
+        <div class="kpi"><strong id="kpi-div">—</strong>Divergências</div>
+        <div class="kpi"><strong id="kpi-homolog">—</strong>Homologação pend.</div>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">Fiscais em campo</h2>
+        <table>
+          <thead><tr><th>Fiscal</th><th>OS abertas</th><th>Status</th></tr></thead>
+          <tbody id="fiscais-body"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Fila de homologação cadastral</h3>
+        <p style="color:var(--muted);font-size:0.9rem">Na versão completa: vistorias sincronizadas aguardam validação do gestor antes do sistema tributário.</p>
+        <table>
+          <thead><tr><th>OS</th><th>Inscrição</th><th>Situação</th></tr></thead>
+          <tbody>
+            <tr><td>OS-8824</td><td>12.034.0201.0007</td><td><span class="badge badge-sync">Aguardando homologação</span></td></tr>
+            <tr><td>OS-8810</td><td>12.034.0011.0022</td><td><span class="badge badge-media">Em revisão</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="demo-footer">
+      E-FISCAL demo · RivasCode · Após aprovação → implementação com PostgreSQL/PostGIS, API e PWA real
+    </footer>
+  </div>
+
+  <script src="js/mock-data.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="js/demo.js"></script>
+</body>
+</html>
