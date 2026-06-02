@@ -38,6 +38,24 @@ export const config = {
   alertaPushEnabled: process.env.ALERTA_PUSH_ENABLED !== '0' && process.env.ALERTA_PUSH_ENABLED !== 'false',
   /** Intervalo mínimo entre pushes do mesmo tipo (horas). */
   alertaPushIntervalHours: Math.max(1, Number(process.env.ALERTA_PUSH_INTERVAL_HOURS) || 6),
+  /** E-mail SMTP para alertas de prazo (0/false desliga). */
+  alertaEmailEnabled: process.env.ALERTA_EMAIL_ENABLED !== '0' && process.env.ALERTA_EMAIL_ENABLED !== 'false',
+  smtpHost: process.env.SMTP_HOST || '',
+  smtpPort: Number(process.env.SMTP_PORT) || 587,
+  smtpSecure: process.env.SMTP_SECURE === '1' || process.env.SMTP_SECURE === 'true',
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: process.env.SMTP_PASS || '',
+  smtpFrom: process.env.SMTP_FROM || '',
+  /** Destinatários extras por tenant (vírgula), além de gestores/admins do banco. */
+  alertaEmailTo: (process.env.ALERTA_EMAIL_TO || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+  /** Destinatários extras alerta global (vírgula), além de SUPER_ADMIN_EMAILS. */
+  alertaEmailSuper: (process.env.ALERTA_EMAIL_SUPER || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
 };
 
 export const usePostgres = () => !!config.databaseUrl;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isApiMode } from '@/api/config';
+import { getApiUrl, isApiMode } from '@/api/config';
 import { subscribeWebPush } from '@/lib/push';
 import { downloadAuthenticatedCsv } from '@/lib/apiDownload';
 import { useInterval } from '@/hooks/useInterval';
@@ -63,7 +63,17 @@ export function PainelPage() {
   const [rotaGestorMsg, setRotaGestorMsg] = useState('');
   const [alertasPrazo, setAlertasPrazo] = useState<OrdemPrazoAlerta[]>([]);
   const [pushPrazoMsg, setPushPrazoMsg] = useState('');
+  const [smtpEnabled, setSmtpEnabled] = useState(false);
   const online = useOnline();
+
+  useEffect(() => {
+    const base = getApiUrl();
+    if (!base || !isApiMode()) return;
+    void fetch(`${base}/api/fisaval/config`)
+      .then((r) => r.json())
+      .then((c: { smtpEnabled?: boolean }) => setSmtpEnabled(!!c.smtpEnabled))
+      .catch(() => {});
+  }, []);
 
   const reload = useCallback(async () => {
     const k = await getKpis();
@@ -237,6 +247,11 @@ export function PainelPage() {
           )}
           {pushPrazoMsg && (
             <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--ok)' }}>{pushPrazoMsg}</p>
+          )}
+          {smtpEnabled && (
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+              E-mail automático ativo (gestores/admins do tenant + ALERTA_EMAIL_TO).
+            </p>
           )}
         </div>
       )}

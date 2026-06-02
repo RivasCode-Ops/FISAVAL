@@ -45,6 +45,6 @@ ALERTA_PUSH_ENABLED=1
 
 ## Próximo
 
-- E-mail (SMTP) paralelo ao push
+- E-mail SMTP — ver [FASE24.md](FASE24.md)
 - Integração ICP-Brasil / gov.br em produção
 - Seed PostgreSQL por tenant

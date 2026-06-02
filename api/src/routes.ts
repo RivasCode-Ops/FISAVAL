@@ -542,6 +542,31 @@ export function createRoutes(): Router {
   );
 
   router.post(
+    '/alertas/prazo-vencido/disparar-email',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (req, res) => {
+      const force = req.query.force === '1' || req.query.force === 'true';
+      const { maybeEmailPrazoTenant } = await import('./prazoEmail.js');
+      res.json(await maybeEmailPrazoTenant(force));
+    }),
+  );
+
+  router.post(
+    '/alertas/prazo-vencido/disparar',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (req, res) => {
+      const force = req.query.force === '1' || req.query.force === 'true';
+      const { maybeNotifyPrazoTenant } = await import('./prazoPush.js');
+      const { maybeEmailPrazoTenant } = await import('./prazoEmail.js');
+      const [push, email] = await Promise.all([
+        maybeNotifyPrazoTenant(force),
+        maybeEmailPrazoTenant(force),
+      ]);
+      res.json({ push, email });
+    }),
+  );
+
+  router.post(
     '/super/alertas/prazo-vencido/disparar-push',
     requireSuperAdmin(),
     asyncHandler(async (req, res) => {
@@ -549,10 +574,31 @@ export function createRoutes(): Router {
       const { maybeNotifySuperPrazo, runPrazoPushCycle } = await import('./prazoPush.js');
       if (req.query.all === '1') {
         await runPrazoPushCycle(force);
-        res.json({ ok: true, mode: 'all-tenants' });
+        res.json({ ok: true, mode: 'all-tenants-push' });
         return;
       }
       res.json(await maybeNotifySuperPrazo(force));
+    }),
+  );
+
+  router.post(
+    '/super/alertas/prazo-vencido/disparar',
+    requireSuperAdmin(),
+    asyncHandler(async (req, res) => {
+      const force = req.query.force === '1' || req.query.force === 'true';
+      const { runPrazoAlertCycle } = await import('./prazoAlertas.js');
+      if (req.query.all === '1') {
+        await runPrazoAlertCycle(force);
+        res.json({ ok: true, mode: 'all-tenants' });
+        return;
+      }
+      const { maybeNotifySuperPrazo } = await import('./prazoPush.js');
+      const { maybeEmailSuperPrazo } = await import('./prazoEmail.js');
+      const [push, email] = await Promise.all([
+        maybeNotifySuperPrazo(force),
+        maybeEmailSuperPrazo(force),
+      ]);
+      res.json({ push, email });
     }),
   );
 
