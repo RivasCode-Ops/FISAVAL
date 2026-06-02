@@ -5,7 +5,10 @@ import { config, usePostgres } from './config.js';
 import { ensureStorage } from './repo.js';
 
 const app = express();
-app.use(cors());
+const corsOrigin = config.corsOrigin
+  ? config.corsOrigin.split(',').map((s) => s.trim()).filter(Boolean)
+  : true;
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '8mb' }));
 
 app.get('/health', (_req, res) => {

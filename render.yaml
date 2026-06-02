@@ -1,0 +1,20 @@
+# Blueprint Render — New → Blueprint → repo FISAVAL
+# Modo JSON (sem DATABASE_URL). Para PostGIS use VPS + docker compose.
+
+services:
+  - type: web
+    name: fisaval-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: UPLOADS_DIR
+        value: uploads
+      - key: CORS_ORIGIN
+        value: https://rivascode-ops.github.io

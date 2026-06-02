@@ -1,6 +1,14 @@
 import { apiClient, apiFotoBlobUrl, apiPushState, apiUploadFoto } from '@/api/client';
 import { isApiMode } from '@/api/config';
 import { db } from '@/db/database';
+import {
+  fotoMeta,
+  getFotoLocal,
+  listFotosDexie,
+  listFotosPendentes,
+  markFotoSynced,
+  saveFotoLocal,
+} from '@/db/fotos';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria, VistoriaFoto } from '@/types';
 
 const now = () => new Date().toISOString();
@@ -185,7 +193,24 @@ export async function syncPendentes(fiscalId: string): Promise<number> {
       n++;
     }
   }
+  const fotosN = await syncFotosPendentes();
   await pushApi();
+  return n + fotosN;
+}
+
+export async function syncFotosPendentes(): Promise<number> {
+  if (!isApiMode() || !navigator.onLine) return 0;
+  let n = 0;
+  for (const f of await listFotosPendentes()) {
+    try {
+      const file = new File([f.blob], f.filename, { type: f.mime });
+      const remote = await apiUploadFoto(f.vistoriaId, file);
+      await markFotoSynced(f, remote);
+      n++;
+    } catch {
+      /* tenta na próxima sync */
+    }
+  }
   return n;
 }
 
@@ -250,21 +275,49 @@ export async function listFiscais() {
 }
 
 export async function listFotos(vistoriaId: string): Promise<VistoriaFoto[]> {
+  const localRows = await db.fotos.where('vistoriaId').equals(vistoriaId).toArray();
+  const localMeta = localRows.map(fotoMeta);
+  const pendingIds = new Set(localRows.filter((f) => f.syncStatus === 'local').map((f) => f.id));
+
   if (isApiMode() && navigator.onLine) {
     try {
-      return await apiClient.listFotos(vistoriaId);
+      const remote = await apiClient.listFotos(vistoriaId);
+      const byId = new Map<string, VistoriaFoto>();
+      for (const f of remote) byId.set(f.id, f);
+      for (const f of localMeta) {
+        if (pendingIds.has(f.id)) byId.set(f.id, f);
+      }
+      return [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     } catch {
-      return [];
+      return localMeta;
     }
   }
-  return [];
+  return localMeta;
 }
 
 export async function uploadFoto(vistoriaId: string, file: File): Promise<VistoriaFoto | null> {
+  const local = await saveFotoLocal(vistoriaId, file);
   if (isApiMode() && navigator.onLine) {
-    return apiUploadFoto(vistoriaId, file);
+    try {
+      const remote = await apiUploadFoto(vistoriaId, file);
+      await markFotoSynced(local, remote);
+      return remote;
+    } catch {
+      return fotoMeta(local);
+    }
+  }
+  return fotoMeta(local);
+}
+
+export async function getFotoDisplayUrl(fotoId: string): Promise<string | null> {
+  const local = await getFotoLocal(fotoId);
+  if (local?.blob) return URL.createObjectURL(local.blob);
+  if (isApiMode() && navigator.onLine) {
+    try {
+      return await apiFotoBlobUrl(fotoId);
+    } catch {
+      return null;
+    }
   }
   return null;
 }
-
-export { apiFotoBlobUrl };

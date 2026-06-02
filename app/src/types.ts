@@ -84,3 +84,9 @@ export interface VistoriaFoto {
   sizeBytes: number;
   createdAt: string;
 }
+
+/** Foto armazenada no IndexedDB (blob + metadados). */
+export interface FotoLocal extends VistoriaFoto {
+  syncStatus: 'local' | 'synced';
+  blob: Blob;
+}

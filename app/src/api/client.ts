@@ -41,15 +41,18 @@ export async function apiBootstrap() {
 
 export async function hydrateDexieFromApi() {
   const data = await apiBootstrap();
-  await db.transaction('rw', db.users, db.demandas, db.ordens, db.vistorias, async () => {
+  const fotosPendentes = await db.fotos.where('syncStatus').equals('local').toArray();
+  await db.transaction('rw', [db.users, db.demandas, db.ordens, db.vistorias, db.fotos], async () => {
     await db.users.clear();
     await db.demandas.clear();
     await db.ordens.clear();
     await db.vistorias.clear();
+    await db.fotos.clear();
     await db.users.bulkAdd(data.users.map((u) => ({ ...u, senha: '' })));
     await db.demandas.bulkAdd(data.demandas);
     await db.ordens.bulkAdd(data.ordens);
     await db.vistorias.bulkAdd(data.vistorias);
+    if (fotosPendentes.length) await db.fotos.bulkAdd(fotosPendentes);
   });
 }
 

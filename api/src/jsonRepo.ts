@@ -1,10 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { config } from './config.js';
 import type { DbShape, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 
-const __dir = dirname(fileURLToPath(import.meta.url));
-const dbPath = join(__dir, '..', 'data', 'fisaval.json');
+const dbPath = join(config.dataDir, 'fisaval.json');
 
 const now = () => new Date().toISOString();
 export const uid = (p: string) => `${p}-${Date.now().toString(36)}`;
@@ -21,7 +20,7 @@ export function loadDb(): DbShape {
 }
 
 export function saveDb(db: DbShape) {
-  mkdirSync(join(__dir, '..', 'data'), { recursive: true });
+  mkdirSync(config.dataDir, { recursive: true });
   writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
 }
 

@@ -20,8 +20,11 @@ jobs:
 
       - name: Build app
         working-directory: app
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: |
           npm ci
+          if [ -n "$VITE_API_URL" ]; then echo "VITE_API_URL=$VITE_API_URL" > .env; fi
           npm run build:pages
 
       - name: Prepare site (docs/)

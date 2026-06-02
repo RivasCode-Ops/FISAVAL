@@ -4,9 +4,9 @@ import { OsMap } from '@/components/OsMap';
 import { useAuthStore } from '@/store/authStore';
 import type { VistoriaFoto } from '@/types';
 import {
-  apiFotoBlobUrl,
   CHECKLIST_ITEMS,
   concluirVistoria,
+  getFotoDisplayUrl,
   getOrCreateVistoria,
   listFotos,
   listOrdensFiscal,
@@ -45,33 +45,24 @@ export function CampoPage() {
       setJustificativa(v.justificativa ?? '');
       const list = await listFotos(v.id);
       setFotos(list);
-      if (isApiMode()) {
-        const urls: Record<string, string> = {};
-        for (const f of list) {
-          try {
-            urls[f.id] = await apiFotoBlobUrl(f.id);
-          } catch {
-            /* skip */
-          }
-        }
-        setFotoUrls(urls);
+      const urls: Record<string, string> = {};
+      for (const f of list) {
+        const url = await getFotoDisplayUrl(f.id);
+        if (url) urls[f.id] = url;
       }
+      setFotoUrls(urls);
     })();
   }, [selected?.id]);
 
   async function onFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !vistoria) return;
-    if (!isApiMode()) {
-      alert('Upload de fotos requer API (app/.env com VITE_API_URL).');
-      return;
-    }
     const foto = await uploadFoto(vistoria.id, file);
     if (foto) {
       setFotos((prev) => [...prev, foto]);
-      const url = await apiFotoBlobUrl(foto.id);
-      setFotoUrls((prev) => ({ ...prev, [foto.id]: url }));
-      setMsg('Foto enviada.');
+      const url = await getFotoDisplayUrl(foto.id);
+      if (url) setFotoUrls((prev) => ({ ...prev, [foto.id]: url }));
+      setMsg(navigator.onLine && isApiMode() ? 'Foto enviada.' : 'Foto salva no aparelho (sincronize depois).');
     }
     e.target.value = '';
   }
