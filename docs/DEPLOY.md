@@ -1,10 +1,25 @@
-# Publicar FISAVAL
+# Por que o link não abria?
 
-## App completo (recomendado)
+O workflow antigo falhou em `configure-pages` porque o **GitHub Pages não estava ativado** no repositório. O site nunca foi publicado (erro 404).
 
-O produto está em `app/` (React + PWA + IndexedDB). Funciona **sem servidor** no celular e no PC.
+## Ativar o site (faça uma vez)
 
-### Local
+1. Abra: https://github.com/RivasCode-Ops/FISAVAL/settings/pages  
+2. Em **Build and deployment** → **Source**, escolha: **Deploy from a branch**  
+3. **Branch:** `gh-pages` → pasta **`/ (root)`** → **Save**  
+4. Aguarde 1–3 minutos e abra: **https://rivascode-ops.github.io/FISAVAL/**
+
+> Após cada `git push` na `main`, o Actions atualiza a branch `gh-pages` automaticamente.
+
+### Alternativa (sem gh-pages)
+
+Se preferir usar só a pasta `docs` na `main`:
+
+- Source: **Deploy from a branch** → **main** → **`/docs`**
+
+(O build já deixa os arquivos em `docs/` no repositório.)
+
+## App local
 
 ```powershell
 cd c:\_PROJETOS\E-FISCAL\app
@@ -12,35 +27,8 @@ npm install
 npm run dev
 ```
 
-Abra **http://127.0.0.1:5192**
+http://127.0.0.1:5192 — `gestor@demo` / `fiscal@demo` — senha `demo123`
 
-| Perfil | Login | Senha |
-|--------|-------|-------|
-| Gestor | gestor@demo | demo123 |
-| Fiscal | fiscal@demo | demo123 |
+## Ver se o deploy rodou
 
-### Online (GitHub Pages)
-
-1. Push na branch `main` do [RivasCode-Ops/FISAVAL](https://github.com/RivasCode-Ops/FISAVAL)
-2. **Settings → Pages → Source: GitHub Actions** (workflow `.github/workflows/pages.yml`)
-3. URL: **https://rivascode-ops.github.io/FISAVAL/**
-
-Build manual (opcional):
-
-```powershell
-cd c:\_PROJETOS\E-FISCAL
-npm run build:pages
-git add docs app
-git commit -m "Build Pages"
-git push
-```
-
-### API opcional (sync log)
-
-```powershell
-cd c:\_PROJETOS\E-FISCAL\api
-npm install
-npm run dev
-```
-
-Em `app/.env`: `VITE_API_URL=http://127.0.0.1:8790`
+https://github.com/RivasCode-Ops/FISAVAL/actions — workflow **Deploy GitHub Pages** deve estar verde.

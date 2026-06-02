@@ -17,6 +17,8 @@ Módulos: **Demandas + OS**, **Campo** (mapa, GPS, checklist, sync), **Painel** 
 
 Publicar: [docs/DEPLOY.md](docs/DEPLOY.md) — **https://rivascode-ops.github.io/FISAVAL/**
 
+Se o link der 404: **Settings → Pages → branch `gh-pages` → / (root)** — ver [DEPLOY.md](docs/DEPLOY.md).
+
 ---
 
 ## Documentação comercial
