@@ -10,7 +10,14 @@ export async function ensureSeed(): Promise<void> {
   const users: User[] = [
     { id: 'u-gestor', email: 'gestor@demo', nome: 'Gestor Finanças', role: 'gestor', senha: 'demo123' },
     { id: 'u-fiscal1', email: 'fiscal@demo', nome: 'Ana Silva', role: 'fiscal', senha: 'demo123' },
-    { id: 'u-fiscal2', email: 'carlos@demo', nome: 'Carlos Mendes', role: 'fiscal', senha: 'demo123' },
+    {
+      id: 'u-fiscal2',
+      email: 'carlos@demo',
+      nome: 'Carlos Mendes',
+      role: 'fiscal',
+      senha: 'demo123',
+      tiposHabilitados: ['Denúncia'],
+    },
     { id: 'u-admin', email: 'admin@demo', nome: 'Administrador', role: 'admin', senha: 'demo123' },
   ];
 

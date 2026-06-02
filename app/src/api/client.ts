@@ -166,7 +166,12 @@ export const apiClient = {
   patchVistoria: (id: string, body: object) =>
     api<Vistoria>(`/vistorias/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   listFotos: (vistoriaId: string) => api<VistoriaFoto[]>(`/vistorias/${vistoriaId}/fotos`),
-  listFiscais: () => api<{ id: string; nome: string; email: string; role: string }[]>('/fiscais'),
+  listFiscais: () => api<Omit<User, 'senha'>[]>('/fiscais'),
+  patchFiscalTipos: (id: string, tiposHabilitados: string[]) =>
+    api<Omit<User, 'senha'>>(`/fiscais/${id}/tipos-habilitados`, {
+      method: 'PATCH',
+      body: JSON.stringify({ tiposHabilitados }),
+    }),
   getKpis: () =>
     api<{
       osHoje: number;

@@ -13,6 +13,7 @@ import {
   type GeoPoint,
 } from './rota.js';
 import { filterDemandas, filterOrdens, matchesTenant } from './tenant.js';
+import { skillsForFiscal } from './tipoVistoria.js';
 import { ordenarComVroom } from './vroom.js';
 import type { ImportRow } from './importCsv.js';
 import type { DbShape, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
@@ -46,7 +47,14 @@ export function seedJson(): DbShape {
   db.users = [
     { id: 'u-gestor', email: 'gestor@demo', nome: 'Gestor Finanças', role: 'gestor', senha: 'demo123' },
     { id: 'u-fiscal1', email: 'fiscal@demo', nome: 'Ana Silva', role: 'fiscal', senha: 'demo123' },
-    { id: 'u-fiscal2', email: 'carlos@demo', nome: 'Carlos Mendes', role: 'fiscal', senha: 'demo123' },
+    {
+      id: 'u-fiscal2',
+      email: 'carlos@demo',
+      nome: 'Carlos Mendes',
+      role: 'fiscal',
+      senha: 'demo123',
+      tiposHabilitados: ['Denúncia'],
+    },
     { id: 'u-admin', email: 'admin@demo', nome: 'Administrador', role: 'admin', senha: 'demo123' },
   ];
   db.demandas = [
@@ -277,12 +285,14 @@ export const jsonRepo = {
         capacidadeRestante: 0,
       };
     }
+    const fiscal = db.users.find((u) => u.id === fiscalId);
+    const vehicleSkills = skillsForFiscal(fiscal?.tiposHabilitados);
     const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
     let ordered: OrdemServico[];
     let engine: 'vroom' | 'prazo-proximidade' = 'prazo-proximidade';
     const vroomCap = config.maxVisitasDiaFiscal > 0 ? capRestante : undefined;
     if (config.vroomUrl && ativas.length >= 2) {
-      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas, vroomCap);
+      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas, vroomCap, vehicleSkills);
       if (idx) {
         ordered = idx.map((i) => ativas[i]);
         engine = 'vroom';
@@ -386,6 +396,23 @@ export const jsonRepo = {
     mkdirSync(join(tenantUploadsDir(), vistoriaId), { recursive: true });
     writeFileSync(p, buffer);
     return this.patchVistoria(vistoriaId, { assinaturaAt: t, assinaturaNome: fiscalNome });
+  },
+  async getUserById(id: string) {
+    const u = loadDb().users.find((x) => x.id === id);
+    if (!u) return null;
+    const { senha: _, ...rest } = u;
+    return rest;
+  },
+  async patchFiscalTipos(id: string, tiposHabilitados: string[]) {
+    let found = false;
+    mutate((db) => {
+      const u = db.users.find((x) => x.id === id && x.role === 'fiscal');
+      if (!u) return;
+      found = true;
+      u.tiposHabilitados = tiposHabilitados.length ? tiposHabilitados : undefined;
+    });
+    if (!found) return null;
+    return jsonRepo.getUserById(id);
   },
   async listFiscais() {
     return loadDb().users.filter((u) => u.role === 'fiscal').map(({ senha: _, ...u }) => u);

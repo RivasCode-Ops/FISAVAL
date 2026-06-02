@@ -182,6 +182,19 @@ export function createRoutes(): Router {
           return;
         }
       }
+      const { fiscalHandlesTipo } = await import('./tipoVistoria.js');
+      const bootstrap = await repo.bootstrap();
+      const fiscal = bootstrap.users.find((u) => u.id === fiscalId);
+      if (!fiscal) {
+        res.status(404).json({ error: 'Fiscal não encontrado' });
+        return;
+      }
+      if (!fiscalHandlesTipo(fiscal.tiposHabilitados, demanda.tipo)) {
+        res.status(409).json({
+          error: `Fiscal não habilitado para o tipo "${demanda.tipo}"`,
+        });
+        return;
+      }
       const os = await repo.gerarOs(req.params.id, fiscalId, fiscalNome, {
         visitaInicio,
         visitaFim,
@@ -401,6 +414,40 @@ export function createRoutes(): Router {
     '/fiscais',
     asyncHandler(async (_req, res) => {
       res.json(await getRepo().listFiscais());
+    }),
+  );
+
+  router.patch(
+    '/fiscais/:id/tipos-habilitados',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (req, res) => {
+      const { tiposHabilitados } = req.body as { tiposHabilitados?: unknown };
+      const { sanitizeTiposHabilitados, TIPOS_VISTORIA_PADRAO } = await import('./tipoVistoria.js');
+      const tipos = sanitizeTiposHabilitados(tiposHabilitados);
+      const allowed = [...TIPOS_VISTORIA_PADRAO] as string[];
+      const invalid = tipos.filter((t) => !allowed.includes(t));
+      if (invalid.length) {
+        res.status(400).json({ error: `Tipos inválidos: ${invalid.join(', ')}` });
+        return;
+      }
+      const repo = getRepo();
+      if (!('patchFiscalTipos' in repo)) {
+        res.status(501).json({ error: 'Repositório não suporta habilitações' });
+        return;
+      }
+      const updated = await (
+        repo as { patchFiscalTipos: (id: string, tipos: string[]) => Promise<unknown> }
+      ).patchFiscalTipos(req.params.id, tipos);
+      if (!updated) {
+        res.status(404).json({ error: 'Fiscal não encontrado' });
+        return;
+      }
+      logAudit(auditUser(getAuth(req)!), 'fiscal.habilitacoes', {
+        entity: 'fiscal',
+        entityId: req.params.id,
+        detail: tipos.length ? tipos.join(', ') : 'todos os tipos',
+      });
+      res.json(updated);
     }),
   );
 

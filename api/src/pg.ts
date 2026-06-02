@@ -13,6 +13,7 @@ import {
 } from './rota.js';
 import { matchesTenant } from './tenant.js';
 import { countVisitasHoje } from './fiscal.js';
+import { skillsForFiscal } from './tipoVistoria.js';
 import { ordenarComVroom } from './vroom.js';
 import { tenantUploadsDir } from './tenantPaths.js';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
@@ -47,6 +48,7 @@ export async function initPgSchema() {
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS prazo TEXT');
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS visita_inicio TEXT');
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS visita_fim TEXT');
+  await p.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS tipos_habilitados JSONB');
 }
 
 type PgQuery = Pick<pg.Pool, 'query'>;
@@ -200,13 +202,27 @@ export async function seedPg() {
   const users: User[] = [
     { id: 'u-gestor', email: 'gestor@demo', nome: 'Gestor Finanças', role: 'gestor', senha: 'demo123' },
     { id: 'u-fiscal1', email: 'fiscal@demo', nome: 'Ana Silva', role: 'fiscal', senha: 'demo123' },
-    { id: 'u-fiscal2', email: 'carlos@demo', nome: 'Carlos Mendes', role: 'fiscal', senha: 'demo123' },
+    {
+      id: 'u-fiscal2',
+      email: 'carlos@demo',
+      nome: 'Carlos Mendes',
+      role: 'fiscal',
+      senha: 'demo123',
+      tiposHabilitados: ['Denúncia'],
+    },
     { id: 'u-admin', email: 'admin@demo', nome: 'Administrador', role: 'admin', senha: 'demo123' },
   ];
   for (const u of users) {
     await getPool().query(
-      'INSERT INTO users (id, email, nome, role, senha) VALUES ($1,$2,$3,$4,$5)',
-      [u.id, u.email, u.nome, u.role, u.senha],
+      'INSERT INTO users (id, email, nome, role, senha, tipos_habilitados) VALUES ($1,$2,$3,$4,$5,$6)',
+      [
+        u.id,
+        u.email,
+        u.nome,
+        u.role,
+        u.senha,
+        u.tiposHabilitados?.length ? JSON.stringify(u.tiposHabilitados) : null,
+      ],
     );
   }
   await insertDemandaRowQ(getPool(), {
@@ -244,6 +260,30 @@ export async function seedPg() {
   );
 }
 
+function rowUser(r: Record<string, unknown>): Omit<User, 'senha'> {
+  const raw = r.tipos_habilitados;
+  let tiposHabilitados: string[] | undefined;
+  if (Array.isArray(raw)) {
+    tiposHabilitados = raw.filter((t): t is string => typeof t === 'string');
+  } else if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        tiposHabilitados = parsed.filter((t): t is string => typeof t === 'string');
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return {
+    id: r.id as string,
+    email: r.email as string,
+    nome: r.nome as string,
+    role: r.role as User['role'],
+    tiposHabilitados: tiposHabilitados?.length ? tiposHabilitados : undefined,
+  };
+}
+
 export const pgRepo = {
   mode: 'postgres' as const,
   async ensureSeed() {
@@ -259,14 +299,14 @@ export const pgRepo = {
   },
   async bootstrap() {
     const [u, d, o, v, f] = await Promise.all([
-      getPool().query('SELECT id, email, nome, role FROM users'),
+      getPool().query('SELECT id, email, nome, role, tipos_habilitados FROM users'),
       getPool().query('SELECT * FROM demandas ORDER BY updated_at DESC'),
       getPool().query('SELECT * FROM ordens ORDER BY updated_at DESC'),
       getPool().query('SELECT * FROM vistorias'),
       getPool().query('SELECT * FROM vistoria_fotos'),
     ]);
     return {
-      users: u.rows,
+      users: u.rows.map((r) => rowUser(r as Record<string, unknown>)),
       demandas: d.rows.map((r) => rowDemanda(r)),
       ordens: o.rows.map((r) => rowOrdem(r)),
       vistorias: v.rows.map((r) => rowVistoria(r)),
@@ -524,8 +564,14 @@ export const pgRepo = {
     let ordered: OrdemServico[];
     let engine: 'vroom' | 'prazo-proximidade' = 'prazo-proximidade';
     const vroomCap = config.maxVisitasDiaFiscal > 0 ? capRestante : undefined;
+    const { rows: fiscalRows } = await getPool().query(
+      'SELECT id, email, nome, role, tipos_habilitados FROM users WHERE id = $1',
+      [fiscalId],
+    );
+    const fiscal = fiscalRows[0] ? rowUser(fiscalRows[0] as Record<string, unknown>) : null;
+    const vehicleSkills = skillsForFiscal(fiscal?.tiposHabilitados);
     if (config.vroomUrl && ativas.length >= 2) {
-      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas, vroomCap);
+      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas, vroomCap, vehicleSkills);
       if (idx) {
         ordered = idx.map((i) => ativas[i]);
         engine = 'vroom';
@@ -652,9 +698,27 @@ export const pgRepo = {
     const { rows } = await getPool().query('SELECT * FROM vistoria_fotos WHERE id = $1', [id]);
     return rows[0] ? rowFoto(rows[0]) : null;
   },
+  async getUserById(id: string) {
+    const { rows } = await getPool().query(
+      'SELECT id, email, nome, role, tipos_habilitados FROM users WHERE id = $1',
+      [id],
+    );
+    return rows[0] ? rowUser(rows[0] as Record<string, unknown>) : null;
+  },
+  async patchFiscalTipos(id: string, tiposHabilitados: string[]) {
+    const { rows } = await getPool().query(
+      `UPDATE users SET tipos_habilitados = $2
+       WHERE id = $1 AND role = 'fiscal'
+       RETURNING id, email, nome, role, tipos_habilitados`,
+      [id, tiposHabilitados.length ? JSON.stringify(tiposHabilitados) : null],
+    );
+    return rows[0] ? rowUser(rows[0] as Record<string, unknown>) : null;
+  },
   async listFiscais() {
-    const { rows } = await getPool().query(`SELECT id, email, nome, role FROM users WHERE role = 'fiscal'`);
-    return rows;
+    const { rows } = await getPool().query(
+      `SELECT id, email, nome, role, tipos_habilitados FROM users WHERE role = 'fiscal'`,
+    );
+    return rows.map((r) => rowUser(r as Record<string, unknown>));
   },
   async getKpis() {
     const hoje = now().slice(0, 10);
@@ -674,7 +738,9 @@ export const pgRepo = {
        WHERE ${tenantOrdemWhere('$1')}`,
       [getActiveTenantId()],
     );
-    const { rows: fiscais } = await getPool().query(`SELECT id, email, nome, role FROM users WHERE role = 'fiscal'`);
+    const { rows: fiscais } = await getPool().query(
+      `SELECT id, email, nome, role, tipos_habilitados FROM users WHERE role = 'fiscal'`,
+    );
     const osHoje = ordens.filter((o) => String(o.created_at).startsWith(hoje)).length || ordens.length;
     return {
       osHoje,
@@ -692,7 +758,7 @@ export const pgRepo = {
           o.prazo &&
           daysUntilPrazo(String(o.prazo)) < 0,
       ).length,
-      fiscais,
+      fiscais: fiscais.map((r) => rowUser(r as Record<string, unknown>)),
     };
   },
 };

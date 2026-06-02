@@ -21,6 +21,8 @@ export interface User {
   nome: string;
   role: UserRole;
   senha: string;
+  /** Vazio = todos os tipos. */
+  tiposHabilitados?: string[];
 }
 
 export interface Demanda {

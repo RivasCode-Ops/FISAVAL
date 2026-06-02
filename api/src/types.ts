@@ -18,6 +18,8 @@ export interface User {
   nome: string;
   role: UserRole;
   senha: string;
+  /** Vazio = todos os tipos (skills VROOM 1–5). */
+  tiposHabilitados?: string[];
 }
 
 export interface Demanda {

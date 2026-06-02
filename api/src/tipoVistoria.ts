@@ -22,3 +22,24 @@ export function skillForTipo(tipo?: string): number {
   if (!tipo?.trim()) return 5;
   return TIPO_SKILL[tipo.trim().toLowerCase()] ?? 5;
 }
+
+export function sanitizeTiposHabilitados(tipos: unknown): string[] {
+  if (!Array.isArray(tipos)) return [];
+  return tipos
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+    .map((t) => t.trim());
+}
+
+/** Sem lista = habilitado para qualquer tipo. */
+export function fiscalHandlesTipo(tiposHabilitados: string[] | undefined | null, tipo?: string): boolean {
+  if (!tiposHabilitados?.length) return true;
+  const t = (tipo ?? '').trim().toLowerCase();
+  if (!t) return true;
+  return tiposHabilitados.some((h) => h.trim().toLowerCase() === t);
+}
+
+export function skillsForFiscal(tiposHabilitados?: string[] | null): number[] {
+  if (!tiposHabilitados?.length) return [...VROOM_SKILLS_FISCAL];
+  const skills = [...new Set(tiposHabilitados.map((t) => skillForTipo(t)))].sort((a, b) => a - b);
+  return skills.length ? skills : [...VROOM_SKILLS_FISCAL];
+}

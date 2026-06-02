@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Demanda, Prioridade } from '@/types';
+import { fiscalHandlesTipo, labelTiposHabilitados } from '@/lib/tipoVistoria';
+import type { Demanda, Prioridade, User } from '@/types';
 import { buildDemandasCsvRows, downloadCsv } from '@/lib/export';
 import { isApiMode } from '@/api/config';
 import {
@@ -13,7 +14,7 @@ import {
 
 export function DemandasPage() {
   const [lista, setLista] = useState<Demanda[]>([]);
-  const [fiscais, setFiscais] = useState<{ id: string; nome: string }[]>([]);
+  const [fiscais, setFiscais] = useState<Omit<User, 'senha'>[]>([]);
   const [tipo, setTipo] = useState('Revisão cadastral');
   const [bairro, setBairro] = useState('');
   const [prioridade, setPrioridade] = useState<Prioridade>('media');
@@ -31,9 +32,8 @@ export function DemandasPage() {
     if (isApiMode() && navigator.onLine) await refreshFromServer();
     setLista(await listDemandas());
     const f = await listFiscais();
-    const list = f.map((x) => ({ id: x.id, nome: x.nome }));
-    setFiscais(list);
-    if (!fiscalPadrao && list[0]) setFiscalPadrao(list[0].id);
+    setFiscais(f);
+    if (!fiscalPadrao && f[0]) setFiscalPadrao(f[0].id);
   }
 
   useEffect(() => {
@@ -66,9 +66,18 @@ export function DemandasPage() {
     await reload();
   }
 
-  async function onGerarOs(demandaId: string) {
-    const fiscal = fiscais.find((f) => f.id === fiscalPadrao);
-    if (!fiscal) return;
+  function fiscaisHabilitadosPara(tipo: string) {
+    return fiscais.filter((f) => fiscalHandlesTipo(f.tiposHabilitados, tipo));
+  }
+
+  async function onGerarOs(demandaId: string, tipoDemanda: string) {
+    const habilitados = fiscaisHabilitadosPara(tipoDemanda);
+    const fiscal =
+      habilitados.find((f) => f.id === fiscalPadrao) ?? habilitados[0];
+    if (!fiscal) {
+      setMsg(`Nenhum fiscal habilitado para "${tipoDemanda}".`);
+      return;
+    }
     try {
       const janela =
         visitaInicio && visitaFim ? { visitaInicio, visitaFim } : undefined;
@@ -187,7 +196,7 @@ export function DemandasPage() {
             <select value={fiscalPadrao} onChange={(e) => setFiscalPadrao(e.target.value)}>
               {fiscais.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.nome}
+                  {f.nome} ({labelTiposHabilitados(f.tiposHabilitados)})
                 </option>
               ))}
             </select>
@@ -220,10 +229,13 @@ export function DemandasPage() {
                   <span className="badge b-status">{d.status}</span>
                 </td>
                 <td>
-                  {d.status === 'aberta' && fiscalPadrao && (
-                    <button type="button" className="btn btn-sm" onClick={() => void onGerarOs(d.id)}>
+                  {d.status === 'aberta' && fiscaisHabilitadosPara(d.tipo).length > 0 && (
+                    <button type="button" className="btn btn-sm" onClick={() => void onGerarOs(d.id, d.tipo)}>
                       Gerar OS
                     </button>
+                  )}
+                  {d.status === 'aberta' && fiscaisHabilitadosPara(d.tipo).length === 0 && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Sem fiscal</span>
                   )}
                 </td>
               </tr>

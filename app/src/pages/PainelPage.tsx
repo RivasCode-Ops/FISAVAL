@@ -12,7 +12,7 @@ import {
   printRelatorio,
 } from '@/lib/export';
 import { getRuntimeTenantId } from '@/lib/tenantFilter';
-import { TIPOS_VISTORIA } from '@/lib/tipoVistoria';
+import { labelTiposHabilitados, TIPOS_VISTORIA } from '@/lib/tipoVistoria';
 import {
   CHECKLIST_ITEMS,
   getKpis,
@@ -23,7 +23,9 @@ import {
   listAllOrdens,
   otimizarRotaFiscal,
   refreshFromServer,
+  updateFiscalTipos,
 } from '@/services/fisavalService';
+import type { User } from '@/types';
 
 const STATUS_OPTS: { value: string; label: string }[] = [
   { value: 'all', label: 'Todos os status' },
@@ -42,8 +44,9 @@ export function PainelPage() {
     divergencias: 0,
     visitasHoje: 0,
     prazoVencido: 0,
-    fiscais: [] as { nome: string; id: string }[],
+    fiscais: [] as { nome: string; id: string; tiposHabilitados?: string[] }[],
   });
+  const [habilitacoesMsg, setHabilitacoesMsg] = useState('');
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [homologQueue, setHomologQueue] = useState<OrdemServico[]>([]);
   const [vistorias, setVistorias] = useState<Record<string, Vistoria>>({});
@@ -65,7 +68,11 @@ export function PainelPage() {
       divergencias: k.divergencias,
       visitasHoje: k.visitasHoje ?? 0,
       prazoVencido: k.prazoVencido ?? 0,
-      fiscais: k.fiscais.map((f) => ({ id: f.id, nome: f.nome })),
+      fiscais: k.fiscais.map((f) => ({
+        id: f.id,
+        nome: f.nome,
+        tiposHabilitados: (f as User).tiposHabilitados,
+      })),
     });
     const all = await listAllOrdens();
     setOrdens(all);
@@ -176,6 +183,65 @@ export function PainelPage() {
         <div className="kpi">
           <strong>{kpis.prazoVencido}</strong>Prazo vencido
         </div>
+      </div>
+
+      <div className="card">
+        <h2 style={{ margin: '0 0 0.75rem' }}>Habilitações por fiscal</h2>
+        <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
+          Define quais tipos de vistoria cada fiscal pode receber (skills VROOM na roteirização). Vazio = todos.
+        </p>
+        {kpis.fiscais.map((f) => (
+          <div key={f.id} style={{ marginBottom: '0.75rem' }}>
+            <strong style={{ display: 'block', marginBottom: '0.35rem' }}>
+              {f.nome}{' '}
+              <span style={{ fontWeight: 400, color: 'var(--muted)', fontSize: '0.8rem' }}>
+                ({labelTiposHabilitados(f.tiposHabilitados)})
+              </span>
+            </strong>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem' }}>
+              {TIPOS_VISTORIA.map((tipo) => {
+                const todos = !f.tiposHabilitados?.length;
+                const checked = todos || f.tiposHabilitados!.includes(tipo);
+                return (
+                  <label key={tipo} style={{ fontSize: '0.85rem', display: 'flex', gap: '0.35rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const base = f.tiposHabilitados?.length
+                          ? [...f.tiposHabilitados!]
+                          : [...TIPOS_VISTORIA];
+                        const next = e.target.checked
+                          ? [...new Set([...base, tipo])]
+                          : base.filter((t) => t !== tipo);
+                        void updateFiscalTipos(f.id, next).then(() => {
+                          setHabilitacoesMsg(`${f.nome}: ${labelTiposHabilitados(next.length ? next : undefined)}`);
+                          void reload();
+                        });
+                      }}
+                    />
+                    {tipo}
+                  </label>
+                );
+              })}
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={() => {
+                  void updateFiscalTipos(f.id, []).then(() => {
+                    setHabilitacoesMsg(`${f.nome}: todos os tipos`);
+                    void reload();
+                  });
+                }}
+              >
+                Todos
+              </button>
+            </div>
+          </div>
+        ))}
+        {habilitacoesMsg && (
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--ok)' }}>{habilitacoesMsg}</p>
+        )}
       </div>
 
       <div className="card export-bar">

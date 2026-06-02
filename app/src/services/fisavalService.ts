@@ -44,7 +44,8 @@ export type OtimizarRotaResult = {
 };
 import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
-import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria, VistoriaFoto } from '@/types';
+import { fiscalHandlesTipo } from '@/lib/tipoVistoria';
+import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from '@/types';
 
 const now = () => new Date().toISOString();
 const uid = (p: string) => `${p}-${Date.now().toString(36)}`;
@@ -180,14 +181,22 @@ export async function gerarOs(
   janela?: { visitaInicio?: string; visitaFim?: string },
 ) {
   if (isApiMode() && navigator.onLine) {
-    const os = await apiClient.gerarOs(demandaId, fiscalId, fiscalNome, janela);
-    await db.ordens.put(os);
-    const demanda = await db.demandas.get(demandaId);
-    if (demanda) await db.demandas.put({ ...demanda, status: 'os_gerada', updatedAt: now() });
-    return os;
+    try {
+      const os = await apiClient.gerarOs(demandaId, fiscalId, fiscalNome, janela);
+      await db.ordens.put(os);
+      const demanda = await db.demandas.get(demandaId);
+      if (demanda) await db.demandas.put({ ...demanda, status: 'os_gerada', updatedAt: now() });
+      return os;
+    } catch (e) {
+      throw e instanceof Error ? e : new Error('Não foi possível gerar a OS');
+    }
   }
   const demanda = await db.demandas.get(demandaId);
   if (!demanda) throw new Error('Demanda não encontrada');
+  const fiscal = await db.users.get(fiscalId);
+  if (!fiscalHandlesTipo(fiscal?.tiposHabilitados, demanda.tipo)) {
+    throw new Error(`Fiscal não habilitado para o tipo "${demanda.tipo}"`);
+  }
   const count = await db.ordens.where('fiscalId').equals(fiscalId).count();
   const os: OrdemServico = {
     id: uid('OS'),
@@ -531,8 +540,38 @@ export async function getKpis() {
   };
 }
 
-export async function listFiscais() {
+export async function listFiscais(): Promise<Omit<User, 'senha'>[]> {
+  if (isApiMode() && navigator.onLine) {
+    try {
+      return await apiClient.listFiscais();
+    } catch {
+      /* Dexie */
+    }
+  }
   return db.users.where('role').equals('fiscal').toArray();
+}
+
+export async function updateFiscalTipos(fiscalId: string, tiposHabilitados: string[]) {
+  if (isApiMode() && navigator.onLine) {
+    const u = await apiClient.patchFiscalTipos(fiscalId, tiposHabilitados);
+    const cur = await db.users.get(fiscalId);
+    if (cur) {
+      await db.users.put({
+        ...cur,
+        tiposHabilitados: u.tiposHabilitados,
+      });
+    }
+    return u;
+  }
+  const cur = await db.users.get(fiscalId);
+  if (!cur || cur.role !== 'fiscal') throw new Error('Fiscal não encontrado');
+  const next = {
+    ...cur,
+    tiposHabilitados: tiposHabilitados.length ? tiposHabilitados : undefined,
+  };
+  await db.users.put(next);
+  const { senha: _, ...rest } = next;
+  return rest;
 }
 
 export async function listFotos(vistoriaId: string): Promise<VistoriaFoto[]> {

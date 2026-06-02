@@ -19,3 +19,15 @@ export function skillForTipo(tipo?: string): number {
   if (!tipo?.trim()) return 5;
   return TIPO_SKILL[tipo.trim().toLowerCase()] ?? 5;
 }
+
+export function fiscalHandlesTipo(tiposHabilitados: string[] | undefined | null, tipo?: string): boolean {
+  if (!tiposHabilitados?.length) return true;
+  const t = (tipo ?? '').trim().toLowerCase();
+  if (!t) return true;
+  return tiposHabilitados.some((h) => h.trim().toLowerCase() === t);
+}
+
+export function labelTiposHabilitados(tipos?: string[]): string {
+  if (!tipos?.length) return 'Todos os tipos';
+  return tipos.join(', ');
+}

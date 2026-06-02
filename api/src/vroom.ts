@@ -9,6 +9,7 @@ export async function ordenarComVroom(
   start: GeoPoint,
   ordens: OrdemServico[],
   vehicleCapacity?: number,
+  vehicleSkills: number[] = VROOM_SKILLS_FISCAL,
 ): Promise<number[] | null> {
   if (ordens.length < 2) return null;
   const url = baseUrl.replace(/\/$/, '');
@@ -20,7 +21,7 @@ export async function ordenarComVroom(
   } = {
     id: 1,
     start: [start.lng, start.lat],
-    skills: VROOM_SKILLS_FISCAL,
+    skills: vehicleSkills.length ? vehicleSkills : VROOM_SKILLS_FISCAL,
   };
   if (vehicleCapacity != null && vehicleCapacity > 0) {
     vehicle.capacity = [vehicleCapacity];
