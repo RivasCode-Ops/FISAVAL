@@ -246,7 +246,7 @@ export function CampoPage() {
             className="btn btn-outline"
             style={{ marginTop: '0.5rem', width: '100%' }}
             onClick={() => {
-              void subscribeWebPush().then((r) => {
+              void subscribeWebPush(['nova_os']).then((r) => {
                 const labels: Record<string, string> = {
                   ok: 'Alertas push ativados.',
                   denied: 'Permissão de notificação negada.',

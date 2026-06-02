@@ -223,6 +223,21 @@ export const apiClient = {
         }[];
       }[];
     }>('/super/alertas/prazo-vencido'),
+  dispararPushPrazo: (force?: boolean) =>
+    api<{ sent: boolean; count: number; throttled?: boolean }>(
+      `/alertas/prazo-vencido/disparar-push${force ? '?force=1' : ''}`,
+      { method: 'POST' },
+    ),
+  dispararPushPrazoSuper: (opts?: { force?: boolean; all?: boolean }) => {
+    const q = new URLSearchParams();
+    if (opts?.force) q.set('force', '1');
+    if (opts?.all) q.set('all', '1');
+    const s = q.toString();
+    return api<{ sent?: boolean; total?: number; throttled?: boolean; ok?: boolean }>(
+      `/super/alertas/prazo-vencido/disparar-push${s ? `?${s}` : ''}`,
+      { method: 'POST' },
+    );
+  },
   alertasPrazoVencido: () =>
     api<{
       count: number;

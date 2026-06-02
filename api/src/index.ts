@@ -5,6 +5,8 @@ import { config, usePostgres } from './config.js';
 import { ensureStorage } from './repo.js';
 import { getActiveMunicipioNome, getActiveTenantId, tenantMiddleware } from './tenantContext.js';
 import { assinaturaPadrao, listAssinaturaModos } from './assinaturaConfig.js';
+import { isPushEnabled } from './push.js';
+import { runPrazoPushCycle } from './prazoPush.js';
 import { listTenants } from './tenantRegistry.js';
 
 const app = express();
@@ -47,6 +49,9 @@ app.get('/api/fisaval/config', tenantMiddleware, (_req, res) => {
     assinaturaModos: listAssinaturaModos(),
     assinaturaPadrao: assinaturaPadrao(),
     alertaPrazoMin: config.alertaPrazoMin,
+    pushEnabled: isPushEnabled(),
+    alertaPushEnabled: config.alertaPushEnabled,
+    alertaPushIntervalHours: config.alertaPushIntervalHours,
   });
 });
 
@@ -54,6 +59,12 @@ app.use('/api/fisaval', tenantMiddleware, createRoutes());
 
 async function main() {
   await ensureStorage();
+  if (isPushEnabled() && config.alertaPushEnabled) {
+    const h = config.alertaPushIntervalHours * 3_600_000;
+    setTimeout(() => void runPrazoPushCycle(), 30_000);
+    setInterval(() => void runPrazoPushCycle(), h);
+    console.log(`  Push prazo vencido: ciclo a cada ${config.alertaPushIntervalHours}h`);
+  }
   app.listen(config.port, () => {
     console.log(`FISAVAL API http://127.0.0.1:${config.port}`);
     const storage = usePostgres()

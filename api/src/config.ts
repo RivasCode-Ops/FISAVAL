@@ -34,6 +34,10 @@ export const config = {
     .filter(Boolean),
   /** Mínimo de OS com prazo vencido para destacar tenant em alerta (super-admin). */
   alertaPrazoMin: Math.max(1, Number(process.env.ALERTA_PRAZO_MIN) || 1),
+  /** Disparo automático de push por prazo vencido (0/false desliga). */
+  alertaPushEnabled: process.env.ALERTA_PUSH_ENABLED !== '0' && process.env.ALERTA_PUSH_ENABLED !== 'false',
+  /** Intervalo mínimo entre pushes do mesmo tipo (horas). */
+  alertaPushIntervalHours: Math.max(1, Number(process.env.ALERTA_PUSH_INTERVAL_HOURS) || 6),
 };
 
 export const usePostgres = () => !!config.databaseUrl;

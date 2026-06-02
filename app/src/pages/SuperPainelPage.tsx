@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { isApiMode } from '@/api/config';
+import { subscribeWebPush } from '@/lib/push';
 import { useAuthStore } from '@/store/authStore';
 
 type Row = {
@@ -38,6 +39,7 @@ export function SuperPainelPage() {
   const [generatedAt, setGeneratedAt] = useState('');
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pushMsg, setPushMsg] = useState('');
 
   const reload = useCallback(async () => {
     if (!isApiMode() || !navigator.onLine) {
@@ -92,6 +94,26 @@ export function SuperPainelPage() {
           <p style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>
             {alertaTotal} OS ativa(s) com prazo vencido em {alertas.length} prefeitura(s) (limiar ≥ {limiar}).
           </p>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline"
+            style={{ marginBottom: '1rem' }}
+            onClick={() => {
+              void subscribeWebPush(['prazo_vencido'], 'super').then((r) => {
+                const labels: Record<string, string> = {
+                  ok: 'Push global de prazo ativado.',
+                  denied: 'Permissão negada.',
+                  'no-vapid': 'VAPID não configurado.',
+                  unsupported: 'Sem suporte a push.',
+                  error: 'Falha ao registrar.',
+                };
+                setPushMsg(labels[r] ?? r);
+              });
+            }}
+          >
+            Ativar push global (super-admin)
+          </button>
+          {pushMsg && <p style={{ fontSize: '0.85rem', color: 'var(--ok)', margin: '0 0 1rem' }}>{pushMsg}</p>}
           {alertas.map((t) => (
             <div key={t.tenantId} style={{ marginBottom: '1rem' }}>
               <strong>

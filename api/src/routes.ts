@@ -531,6 +531,31 @@ export function createRoutes(): Router {
     }),
   );
 
+  router.post(
+    '/alertas/prazo-vencido/disparar-push',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (req, res) => {
+      const force = req.query.force === '1' || req.query.force === 'true';
+      const { maybeNotifyPrazoTenant } = await import('./prazoPush.js');
+      res.json(await maybeNotifyPrazoTenant(force));
+    }),
+  );
+
+  router.post(
+    '/super/alertas/prazo-vencido/disparar-push',
+    requireSuperAdmin(),
+    asyncHandler(async (req, res) => {
+      const force = req.query.force === '1' || req.query.force === 'true';
+      const { maybeNotifySuperPrazo, runPrazoPushCycle } = await import('./prazoPush.js');
+      if (req.query.all === '1') {
+        await runPrazoPushCycle(force);
+        res.json({ ok: true, mode: 'all-tenants' });
+        return;
+      }
+      res.json(await maybeNotifySuperPrazo(force));
+    }),
+  );
+
   router.patch(
     '/fiscais/:id/tipos-habilitados',
     requireRoles('gestor', 'admin'),
@@ -612,7 +637,36 @@ export function createRoutes(): Router {
 
   router.post(
     '/push/subscribe',
-    requireRoles('fiscal'),
+    requireRoles('fiscal', 'gestor', 'admin'),
+    asyncHandler(async (req, res) => {
+      if (!isPushEnabled()) {
+        res.status(503).json({ error: 'Web Push não configurado' });
+        return;
+      }
+      const auth = getAuth(req)!;
+      const body = req.body as {
+        subscription?: { endpoint: string; keys: { p256dh: string; auth: string } };
+        scopes?: string[];
+      };
+      const sub = body.subscription;
+      if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+        res.status(400).json({ error: 'subscription inválida' });
+        return;
+      }
+      const role = auth.role as 'fiscal' | 'gestor' | 'admin';
+      const defaultScopes =
+        role === 'fiscal' ? (['nova_os'] as const) : (['prazo_vencido'] as const);
+      const scopes = (body.scopes?.length ? body.scopes : defaultScopes).filter(
+        (s): s is 'nova_os' | 'prazo_vencido' => s === 'nova_os' || s === 'prazo_vencido',
+      );
+      await savePushSubscription(auth.sub, role, sub, scopes.length ? scopes : [...defaultScopes]);
+      res.json({ ok: true, scopes: scopes.length ? scopes : [...defaultScopes] });
+    }),
+  );
+
+  router.post(
+    '/push/subscribe/super',
+    requireSuperAdmin(),
     asyncHandler(async (req, res) => {
       if (!isPushEnabled()) {
         res.status(503).json({ error: 'Web Push não configurado' });
@@ -627,8 +681,9 @@ export function createRoutes(): Router {
         res.status(400).json({ error: 'subscription inválida' });
         return;
       }
-      await savePushSubscription(auth.sub, sub);
-      res.json({ ok: true });
+      const { saveSuperPushSubscription } = await import('./push.js');
+      await saveSuperPushSubscription(auth.sub, sub);
+      res.json({ ok: true, scopes: ['prazo_vencido'] });
     }),
   );
 
@@ -685,7 +740,7 @@ export function createRoutes(): Router {
 
   router.post(
     '/push/unsubscribe',
-    requireRoles('fiscal'),
+    requireRoles('fiscal', 'gestor', 'admin'),
     asyncHandler(async (req, res) => {
       const endpoint = (req.body as { endpoint?: string }).endpoint;
       if (endpoint) await removePushSubscription(endpoint);

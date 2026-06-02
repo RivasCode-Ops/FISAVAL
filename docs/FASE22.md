@@ -33,6 +33,6 @@ Login `gestor@demo` → Painel mostra alerta. Login `admin@demo` + tenant qualqu
 
 ## Próximo
 
-- Push/e-mail automático para gestor e super-admin
+- Push automático de prazo — ver [FASE23.md](FASE23.md)
 - Integração ICP-Brasil / gov.br (produção)
 - Seed PostgreSQL na primeira visita ao tenant

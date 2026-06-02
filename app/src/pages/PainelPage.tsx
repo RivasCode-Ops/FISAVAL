@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isApiMode } from '@/api/config';
+import { subscribeWebPush } from '@/lib/push';
 import { downloadAuthenticatedCsv } from '@/lib/apiDownload';
 import { useInterval } from '@/hooks/useInterval';
 import { useOnline } from '@/hooks/useOnline';
@@ -61,6 +62,7 @@ export function PainelPage() {
   const [rotaFiscalId, setRotaFiscalId] = useState('');
   const [rotaGestorMsg, setRotaGestorMsg] = useState('');
   const [alertasPrazo, setAlertasPrazo] = useState<OrdemPrazoAlerta[]>([]);
+  const [pushPrazoMsg, setPushPrazoMsg] = useState('');
   const online = useOnline();
 
   const reload = useCallback(async () => {
@@ -212,6 +214,30 @@ export function PainelPage() {
           <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
             Clique na linha para destacar no mapa.
           </p>
+          {isApiMode() && online && (
+            <button
+              type="button"
+              className="btn btn-sm btn-outline"
+              style={{ marginTop: '0.5rem' }}
+              onClick={() => {
+                void subscribeWebPush(['prazo_vencido']).then((r) => {
+                  const labels: Record<string, string> = {
+                    ok: 'Push de prazo vencido ativado neste navegador.',
+                    denied: 'Permissão de notificação negada.',
+                    'no-vapid': 'Configure VAPID na API.',
+                    unsupported: 'Navegador sem suporte.',
+                    error: 'Falha ao registrar push.',
+                  };
+                  setPushPrazoMsg(labels[r] ?? r);
+                });
+              }}
+            >
+              Ativar notificação push (prazo)
+            </button>
+          )}
+          {pushPrazoMsg && (
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--ok)' }}>{pushPrazoMsg}</p>
+          )}
         </div>
       )}
 

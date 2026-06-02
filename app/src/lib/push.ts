@@ -1,5 +1,8 @@
 import { getApiUrl } from '@/api/config';
+import { getStoredTenantId } from '@/api/tenantStorage';
 import { useAuthStore } from '@/store/authStore';
+
+export type PushScope = 'nova_os' | 'prazo_vencido';
 
 function urlBase64ToUint8Array(base64: string) {
   const pad = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -19,7 +22,34 @@ export async function fetchVapidPublicKey(): Promise<string | null> {
   return data.publicKey;
 }
 
-export async function subscribeWebPush(): Promise<'ok' | 'unsupported' | 'denied' | 'no-vapid' | 'error'> {
+async function registerSubscription(
+  path: string,
+  body: { subscription: PushSubscriptionJSON; scopes?: PushScope[] },
+): Promise<boolean> {
+  const token = useAuthStore.getState().token;
+  const base = getApiUrl();
+  const tid = getStoredTenantId();
+  const res = await fetch(`${base}/api/fisaval${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(tid ? { 'X-Tenant-Id': tid } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  return res.ok;
+}
+
+type PushSubscriptionJSON = {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+};
+
+export async function subscribeWebPush(
+  scopes: PushScope[] = ['nova_os'],
+  mode: 'tenant' | 'super' = 'tenant',
+): Promise<'ok' | 'unsupported' | 'denied' | 'no-vapid' | 'error'> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported';
   const publicKey = await fetchVapidPublicKey();
   if (!publicKey) return 'no-vapid';
@@ -36,17 +66,13 @@ export async function subscribeWebPush(): Promise<'ok' | 'unsupported' | 'denied
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
     }
-    const token = useAuthStore.getState().token;
-    const base = getApiUrl();
-    const res = await fetch(`${base}/api/fisaval/push/subscribe`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ subscription: sub.toJSON() }),
+    const json = sub.toJSON() as PushSubscriptionJSON;
+    const path = mode === 'super' ? '/push/subscribe/super' : '/push/subscribe';
+    const ok = await registerSubscription(path, {
+      subscription: json,
+      scopes: mode === 'super' ? ['prazo_vencido'] : scopes,
     });
-    return res.ok ? 'ok' : 'error';
+    return ok ? 'ok' : 'error';
   } catch {
     return 'error';
   }
