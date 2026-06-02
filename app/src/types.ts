@@ -84,6 +84,7 @@ export interface Session {
   email: string;
   nome: string;
   role: UserRole;
+  superAdmin?: boolean;
 }
 
 export interface VistoriaFoto {

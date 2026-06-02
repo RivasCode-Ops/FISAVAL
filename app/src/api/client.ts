@@ -26,10 +26,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function apiLogin(email: string, senha: string) {
-  return api<{ token: string; user: { id: string; email: string; nome: string; role: User['role'] } }>(
-    '/auth/login',
-    { method: 'POST', body: JSON.stringify({ email, senha }), headers: headers() },
-  );
+  return api<{
+    token: string;
+    user: { id: string; email: string; nome: string; role: User['role'] };
+    superAdmin?: boolean;
+  }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, senha }), headers: headers() });
 }
 
 export async function apiBootstrap() {
@@ -172,6 +173,28 @@ export const apiClient = {
       method: 'PATCH',
       body: JSON.stringify({ tiposHabilitados }),
     }),
+  sugerirFiscal: (tipo: string) =>
+    api<{
+      tipo: string;
+      fiscalId: string | null;
+      fiscalNome: string | null;
+      carga: { ativas: number; visitasHoje: number } | null;
+    }>(`/fiscais/sugerir?tipo=${encodeURIComponent(tipo)}`),
+  superOverview: () =>
+    api<{
+      generatedAt: string;
+      tenants: {
+        tenantId: string;
+        municipio: string;
+        osHoje: number;
+        concluidas: number;
+        homolog: number;
+        divergencias: number;
+        visitasHoje: number;
+        prazoVencido: number;
+        fiscaisAtivos: number;
+      }[];
+    }>('/super/overview'),
   getKpis: () =>
     api<{
       osHoje: number;

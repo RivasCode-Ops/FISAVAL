@@ -44,6 +44,7 @@ export type OtimizarRotaResult = {
 };
 import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
+import { buildFiscalCargaLocal, pickFiscalIdLocal } from '@/lib/sugerirFiscal';
 import { fiscalHandlesTipo } from '@/lib/tipoVistoria';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from '@/types';
 
@@ -538,6 +539,22 @@ export async function getKpis() {
     prazoVencido: prazoVencidoCount,
     fiscais,
   };
+}
+
+export async function sugerirFiscalParaTipo(tipo: string): Promise<string | null> {
+  if (isApiMode() && navigator.onLine) {
+    try {
+      const r = await apiClient.sugerirFiscal(tipo);
+      return r.fiscalId;
+    } catch {
+      /* Dexie */
+    }
+  }
+  const fiscais = await listFiscais();
+  const ordens = await listOrdensTenantScoped();
+  const vistorias = await db.vistorias.toArray();
+  const carga = buildFiscalCargaLocal(fiscais, ordens, vistorias);
+  return pickFiscalIdLocal(fiscais, tipo, carga);
 }
 
 export async function listFiscais(): Promise<Omit<User, 'senha'>[]> {

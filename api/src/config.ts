@@ -27,6 +27,11 @@ export const config = {
   maxVisitasDiaFiscal: Number(process.env.MAX_VISITAS_DIA_FISCAL) || 0,
   /** Aceita header X-Tenant-Id (várias prefeituras na mesma API). */
   multiTenant: process.env.MULTI_TENANT === '1' || process.env.MULTI_TENANT === 'true',
+  /** E-mails com visão cross-tenant (vírgula). Exige MULTI_TENANT. */
+  superAdminEmails: (process.env.SUPER_ADMIN_EMAILS || 'admin@demo')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
 };
 
 export const usePostgres = () => !!config.databaseUrl;

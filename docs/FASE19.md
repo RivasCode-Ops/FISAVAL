@@ -33,5 +33,4 @@ PostgreSQL: coluna `users.tipos_habilitados` (JSONB).
 ## Próximo
 
 - Assinatura ICP-Brasil / gov.br
-- Painel super-admin cross-tenant
-- Sugestão automática de fiscal por tipo na fila
+- Super-admin e sugestão de fiscal — ver [FASE20.md](FASE20.md)

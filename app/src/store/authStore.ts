@@ -11,6 +11,7 @@ type AuthState = {
   login: (email: string, senha: string) => Promise<boolean>;
   logout: () => void;
   hasRole: (...roles: UserRole[]) => boolean;
+  isSuperAdmin: () => boolean;
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -23,7 +24,7 @@ export const useAuthStore = create<AuthState>()(
 
         if (isApiMode() && navigator.onLine) {
           try {
-            const { user, token } = await apiLogin(normalized, senha);
+            const { user, token, superAdmin } = await apiLogin(normalized, senha);
             set({
               token,
               session: {
@@ -31,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
                 email: user.email,
                 nome: user.nome,
                 role: user.role,
+                superAdmin: !!superAdmin,
               },
             });
             await hydrateDexieFromApi();
@@ -42,6 +44,10 @@ export const useAuthStore = create<AuthState>()(
 
         const user = await db.users.where('email').equals(normalized).first();
         if (!user || user.senha !== senha) return false;
+        const superEmails = (import.meta.env.VITE_SUPER_ADMIN_EMAILS as string | undefined)
+          ?.split(',')
+          .map((e: string) => e.trim().toLowerCase());
+        const superAdmin = normalized === 'admin@demo' || superEmails?.includes(normalized);
         set({
           token: null,
           session: {
@@ -49,6 +55,7 @@ export const useAuthStore = create<AuthState>()(
             email: user.email,
             nome: user.nome,
             role: user.role,
+            superAdmin: !!superAdmin,
           },
         });
         return true;
@@ -58,6 +65,7 @@ export const useAuthStore = create<AuthState>()(
         const s = get().session;
         return !!s && roles.includes(s.role);
       },
+      isSuperAdmin: () => !!get().session?.superAdmin,
     }),
     { name: 'fisaval-session' },
   ),

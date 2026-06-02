@@ -2,7 +2,9 @@ import { Router } from 'express';
 import multer from 'multer';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { authRequired, getAuth, requireRoles, signToken } from './auth.js';
+import { authRequired, getAuth, requireRoles, requireSuperAdmin, signToken } from './auth.js';
+import { isSuperAdmin } from './superAdmin.js';
+import { buildFiscalCarga, pickFiscalId } from './sugerirFiscal.js';
 import { demandasCsvRows, ordensCsvRows, toCsv } from './csvExport.js';
 import {
   getVapidPublicKey,
@@ -65,6 +67,7 @@ export function createRoutes(): Router {
       res.json({
         token,
         user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
+        superAdmin: isSuperAdmin(user.email),
       });
     }),
   );
@@ -414,6 +417,44 @@ export function createRoutes(): Router {
     '/fiscais',
     asyncHandler(async (_req, res) => {
       res.json(await getRepo().listFiscais());
+    }),
+  );
+
+  router.get(
+    '/fiscais/sugerir',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (req, res) => {
+      const tipo = String(req.query.tipo || '').trim();
+      if (!tipo) {
+        res.status(400).json({ error: 'Informe query tipo' });
+        return;
+      }
+      const repo = getRepo();
+      const fiscais = await repo.listFiscais();
+      const ordens = await repo.listOrdens();
+      const { vistorias } = await repo.bootstrap();
+      const carga = buildFiscalCarga(
+        fiscais.map((f) => f.id),
+        ordens,
+        vistorias,
+      );
+      const fiscalId = pickFiscalId(fiscais, tipo, carga);
+      const fiscal = fiscais.find((f) => f.id === fiscalId);
+      res.json({
+        tipo,
+        fiscalId,
+        fiscalNome: fiscal?.nome ?? null,
+        carga: fiscalId ? carga[fiscalId] : null,
+      });
+    }),
+  );
+
+  router.get(
+    '/super/overview',
+    requireSuperAdmin(),
+    asyncHandler(async (_req, res) => {
+      const { aggregateTenantsOverview } = await import('./superAdmin.js');
+      res.json(await aggregateTenantsOverview());
     }),
   );
 

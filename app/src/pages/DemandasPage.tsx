@@ -8,6 +8,7 @@ import {
   gerarOs,
   listDemandas,
   listFiscais,
+  sugerirFiscalParaTipo,
   importDemandasCsvFile,
   refreshFromServer,
 } from '@/services/fisavalService';
@@ -25,6 +26,7 @@ export function DemandasPage() {
   const [lng, setLng] = useState<number | undefined>();
   const [msg, setMsg] = useState('');
   const [fiscalPadrao, setFiscalPadrao] = useState('');
+  const [sugestaoNome, setSugestaoNome] = useState('');
   const [visitaInicio, setVisitaInicio] = useState('');
   const [visitaFim, setVisitaFim] = useState('');
 
@@ -39,6 +41,18 @@ export function DemandasPage() {
   useEffect(() => {
     void reload();
   }, []);
+
+  useEffect(() => {
+    void sugerirFiscalParaTipo(tipo).then((id) => {
+      if (!id) {
+        setSugestaoNome('');
+        return;
+      }
+      setFiscalPadrao(id);
+      const f = fiscais.find((x) => x.id === id);
+      setSugestaoNome(f?.nome ?? '');
+    });
+  }, [tipo, fiscais]);
 
   async function capturarGps() {
     const pos = await new Promise<GeolocationPosition | null>((resolve) => {
@@ -200,6 +214,11 @@ export function DemandasPage() {
                 </option>
               ))}
             </select>
+            {sugestaoNome && fiscalPadrao && (
+              <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
+                Sugerido: {sugestaoNome}
+              </span>
+            )}
           </label>
         </div>
         {msg && <p style={{ color: 'var(--ok)', fontSize: '0.9rem' }}>{msg}</p>}

@@ -12,6 +12,7 @@ export function Layout() {
   const session = useAuthStore((s) => s.session);
   const logout = useAuthStore((s) => s.logout);
   const hasRole = useAuthStore((s) => s.hasRole);
+  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin());
   const navigate = useNavigate();
   const online = useOnline();
   const { health, checking, check } = useApiHealth(60_000);
@@ -70,6 +71,7 @@ export function Layout() {
               <NavLink to="/painel" end>Painel</NavLink>
               <NavLink to="/demandas">Demandas</NavLink>
               <NavLink to="/auditoria">Auditoria</NavLink>
+              {isSuperAdmin && <NavLink to="/super">Global</NavLink>}
             </>
           )}
           {hasRole('fiscal') && <NavLink to="/campo">Campo</NavLink>}

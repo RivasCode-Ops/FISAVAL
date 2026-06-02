@@ -27,6 +27,22 @@ export function requireRoles(...roles: string[]) {
   };
 }
 
+export function requireSuperAdmin() {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const auth = getAuth(req);
+    if (!auth) {
+      res.status(401).json({ error: 'Token ausente' });
+      return;
+    }
+    const { isSuperAdmin } = await import('./superAdmin.js');
+    if (!isSuperAdmin(auth.email)) {
+      res.status(403).json({ error: 'Acesso super-admin necessário' });
+      return;
+    }
+    next();
+  };
+}
+
 export function authRequired(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {

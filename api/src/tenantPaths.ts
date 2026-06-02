@@ -11,7 +11,7 @@ export function tenantIsolated(): boolean {
 
 export function tenantDataDir(): string {
   if (!tenantIsolated()) return config.dataDir;
-  return join(config.dataDir, 'tenants', config.tenantId);
+  return join(config.dataDir, 'tenants', getActiveTenantId());
 }
 
 export function tenantDbPath(): string {

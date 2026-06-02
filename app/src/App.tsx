@@ -7,6 +7,7 @@ import { HomeRedirect } from '@/pages/HomeRedirect';
 import { LoginPage } from '@/pages/LoginPage';
 import { AuditoriaPage } from '@/pages/AuditoriaPage';
 import { PainelPage } from '@/pages/PainelPage';
+import { SuperPainelPage } from '@/pages/SuperPainelPage';
 import { useAuthStore } from '@/store/authStore';
 
 export function App() {
@@ -22,6 +23,7 @@ export function App() {
             <Route path="painel" element={<PainelPage />} />
             <Route path="demandas" element={<DemandasPage />} />
             <Route path="auditoria" element={<AuditoriaPage />} />
+            <Route path="super" element={<SuperPainelPage />} />
             <Route path="campo" element={<CampoPage />} />
           </Route>
         </Route>
