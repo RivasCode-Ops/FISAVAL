@@ -1,10 +1,10 @@
-import { config } from './config.js';
+import { getActiveTenantId } from './tenantContext.js';
 import type { Demanda, OrdemServico } from './types.js';
 
 /** Registros sem tenant (legado) ou com o tenant da instância. */
 export function matchesTenant(recordTenant?: string): boolean {
   if (!recordTenant) return true;
-  return recordTenant === config.tenantId;
+  return recordTenant === getActiveTenantId();
 }
 
 export function filterDemandas(list: Demanda[]): Demanda[] {

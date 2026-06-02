@@ -1,4 +1,5 @@
-import { usePostgres } from './config.js';
+import { config, usePostgres } from './config.js';
+import { ensureTenantReady } from './tenantContext.js';
 import { jsonRepo } from './jsonRepo.js';
 import { pgRepo } from './pg.js';
 
@@ -9,7 +10,7 @@ export function getRepo(): Repo {
 }
 
 export async function ensureStorage() {
+  await ensureTenantReady(config.tenantId);
   const repo = getRepo();
   if (repo.mode === 'postgres') await repo.ensureSeed();
-  else repo.ensureSeed();
 }

@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { config } from './config.js';
+import { getActiveTenantId } from './tenantContext.js';
 import {
   daysUntilPrazo,
   estimateRotaStats,
@@ -68,7 +69,7 @@ async function insertDemandaRowQ(
   },
 ) {
   const t2 = values.updatedAt ?? values.createdAt;
-  const tenant = values.tenantId ?? config.tenantId;
+  const tenant = values.tenantId ?? getActiveTenantId();
   if (pgHasGeom) {
     await q.query(
       `INSERT INTO demandas (id, tipo, bairro, prioridade, prazo, status, inscricao, endereco, lat, lng, geom, tenant_id, created_at, updated_at)
@@ -355,7 +356,7 @@ export const pgRepo = {
   async listDemandas() {
     const { rows } = await getPool().query(
       'SELECT * FROM demandas WHERE tenant_id IS NULL OR tenant_id = $1 ORDER BY updated_at DESC',
-      [config.tenantId],
+      [getActiveTenantId()],
     );
     return rows.map((r) => rowDemanda(r));
   },
@@ -453,13 +454,13 @@ export const pgRepo = {
     if (fiscalId) {
       const { rows } = await getPool().query(
         `SELECT * FROM ordens WHERE fiscal_id = $1 AND ${tenantOrdemWhere('$2')} ORDER BY rota_ordem`,
-        [fiscalId, config.tenantId],
+        [fiscalId, getActiveTenantId()],
       );
       return rows.map((r) => rowOrdem(r));
     }
     const { rows } = await getPool().query(
       `SELECT * FROM ordens WHERE ${tenantOrdemWhere('$1')} ORDER BY updated_at DESC`,
-      [config.tenantId],
+      [getActiveTenantId()],
     );
     return rows.map((r) => rowOrdem(r));
   },
@@ -653,19 +654,19 @@ export const pgRepo = {
     const hoje = now().slice(0, 10);
     const { rows: ordens } = await getPool().query(
       `SELECT o.status, o.created_at, o.id, o.prazo FROM ordens o WHERE ${tenantOrdemWhere('$1')}`,
-      [config.tenantId],
+      [getActiveTenantId()],
     );
     const { rows: visitasRows } = await getPool().query(
       `SELECT COUNT(*)::int AS c FROM vistorias v
        JOIN ordens o ON o.id = v.os_id
        WHERE ${tenantOrdemWhere('$1')} AND v.concluida_at::text LIKE $2 || '%'`,
-      [config.tenantId, hoje],
+      [getActiveTenantId(), hoje],
     );
     const { rows: vistorias } = await getPool().query(
       `SELECT v.divergencia FROM vistorias v
        JOIN ordens o ON o.id = v.os_id
        WHERE ${tenantOrdemWhere('$1')}`,
-      [config.tenantId],
+      [getActiveTenantId()],
     );
     const { rows: fiscais } = await getPool().query(`SELECT id, email, nome, role FROM users WHERE role = 'fiscal'`);
     const osHoje = ordens.filter((o) => String(o.created_at).startsWith(hoje)).length || ordens.length;

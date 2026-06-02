@@ -35,6 +35,6 @@ Config pública em `/api/fisaval/config`: `tenantIsolated`, `maxVisitasDiaFiscal
 
 ## Próximo
 
+- Multi-tenant na mesma API — ver [FASE17.md](FASE17.md)
 - Assinatura ICP-Brasil / gov.br
-- Múltiplos tenants na mesma API (header `X-Tenant-Id`)
 - Skills VROOM por tipo de vistoria

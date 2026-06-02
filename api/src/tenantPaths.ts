@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './config.js';
+import { getActiveTenantId } from './tenantContext.js';
 
 /** Dados separados por `TENANT_ID` (padrão ligado). Defina `TENANT_ISOLATED=0` para modo legado. */
 export function tenantIsolated(): boolean {
@@ -27,7 +28,7 @@ export function tenantPushSubsPath(): string {
 
 export function tenantUploadsDir(): string {
   if (!tenantIsolated()) return config.uploadsDir;
-  return join(config.uploadsDir, config.tenantId);
+  return join(config.uploadsDir, getActiveTenantId());
 }
 
 /** Copia `fisaval.json` / auditoria / push da raiz para a pasta do tenant (uma vez). */

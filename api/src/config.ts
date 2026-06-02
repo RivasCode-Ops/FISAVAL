@@ -25,6 +25,8 @@ export const config = {
   maxOsAtivasFiscal: Number(process.env.MAX_OS_ATIVAS_FISCAL) || 0,
   /** Máximo de vistorias concluídas por fiscal por dia; 0 = sem limite. */
   maxVisitasDiaFiscal: Number(process.env.MAX_VISITAS_DIA_FISCAL) || 0,
+  /** Aceita header X-Tenant-Id (várias prefeituras na mesma API). */
+  multiTenant: process.env.MULTI_TENANT === '1' || process.env.MULTI_TENANT === 'true',
 };
 
 export const usePostgres = () => !!config.databaseUrl;

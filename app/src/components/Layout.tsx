@@ -4,6 +4,7 @@ import { getApiUrl, isApiMode } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
 import { useApiHealth } from '@/hooks/useApiHealth';
 import { useOnline } from '@/hooks/useOnline';
+import { getStoredTenantId } from '@/api/tenantStorage';
 import { setRuntimeTenantId } from '@/lib/tenantFilter';
 import { refreshFromServer } from '@/services/fisavalService';
 
@@ -21,7 +22,10 @@ export function Layout() {
   useEffect(() => {
     const base = getApiUrl();
     if (base) {
-      void fetch(`${base}/api/fisaval/config`)
+      const tid = getStoredTenantId();
+      void fetch(`${base}/api/fisaval/config`, {
+        headers: tid ? { 'X-Tenant-Id': tid } : {},
+      })
         .then((r) => r.json())
         .then((c: { municipio?: string; tenantId?: string }) => {
           setMunicipio(c.municipio ?? '');

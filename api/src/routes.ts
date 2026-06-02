@@ -14,6 +14,7 @@ import { logAudit, listAudit } from './audit.js';
 import { parseDemandasCsv } from './importCsv.js';
 import { config } from './config.js';
 import { isHhmm } from './janela.js';
+import { getActiveTenantId } from './tenantContext.js';
 import { tenantUploadsDir } from './tenantPaths.js';
 import { getRepo } from './repo.js';
 import { uid } from './jsonRepo.js';
@@ -347,7 +348,7 @@ export function createRoutes(): Router {
       logAudit(auditUser(auth), 'vistoria.assinatura', {
         entity: 'vistoria',
         entityId: vistoriaId,
-        detail: `tenant:${config.tenantId}`,
+        detail: `tenant:${getActiveTenantId()}`,
       });
       res.json({ ok: true });
     }),

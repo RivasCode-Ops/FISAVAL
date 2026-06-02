@@ -3,6 +3,8 @@ import express from 'express';
 import { createRoutes } from './routes.js';
 import { config, usePostgres } from './config.js';
 import { ensureStorage } from './repo.js';
+import { getActiveMunicipioNome, getActiveTenantId, tenantMiddleware } from './tenantContext.js';
+import { listTenants } from './tenantRegistry.js';
 
 const app = express();
 const corsOrigin = config.corsOrigin
@@ -22,20 +24,29 @@ app.get('/health', (_req, res) => {
   });
 });
 
-app.get('/api/fisaval/config', (_req, res) => {
+app.get('/api/fisaval/tenants', (_req, res) => {
   res.json({
-    municipio: config.municipioNome,
-    tenantId: config.tenantId,
+    multiTenant: config.multiTenant,
+    defaultTenantId: config.tenantId,
+    tenants: listTenants(),
+  });
+});
+
+app.get('/api/fisaval/config', tenantMiddleware, (_req, res) => {
+  res.json({
+    municipio: getActiveMunicipioNome(),
+    tenantId: getActiveTenantId(),
     version: '0.4',
     vroom: !!config.vroomUrl,
     checkinRadiusM: config.checkinRadiusM,
     maxOsAtivasFiscal: config.maxOsAtivasFiscal,
     maxVisitasDiaFiscal: config.maxVisitasDiaFiscal,
     tenantIsolated: process.env.TENANT_ISOLATED !== '0' && process.env.TENANT_ISOLATED !== 'false',
+    multiTenant: config.multiTenant,
   });
 });
 
-app.use('/api/fisaval', createRoutes());
+app.use('/api/fisaval', tenantMiddleware, createRoutes());
 
 async function main() {
   await ensureStorage();

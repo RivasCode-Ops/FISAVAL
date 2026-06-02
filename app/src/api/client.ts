@@ -1,6 +1,7 @@
 import { db } from '@/db/database';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from '@/types';
 import { getApiUrl } from './config';
+import { getStoredTenantId } from './tenantStorage';
 import { useAuthStore } from '@/store/authStore';
 
 function headers(json = true): HeadersInit {
@@ -8,6 +9,8 @@ function headers(json = true): HeadersInit {
   if (json) h['Content-Type'] = 'application/json';
   const token = useAuthStore.getState().token;
   if (token) h.Authorization = `Bearer ${token}`;
+  const tenant = getStoredTenantId();
+  if (tenant) h['X-Tenant-Id'] = tenant;
   return h;
 }
 

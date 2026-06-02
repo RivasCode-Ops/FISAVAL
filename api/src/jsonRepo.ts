@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './config.js';
+import { getActiveTenantId } from './tenantContext.js';
 import { countVisitasHoje } from './fiscal.js';
 import { migrateLegacyTenantData, tenantDataDir, tenantDbPath, tenantUploadsDir } from './tenantPaths.js';
 import {
@@ -137,7 +138,7 @@ export const jsonRepo = {
     const t = now();
     const d: Demanda = {
       ...input,
-      tenantId: input.tenantId ?? config.tenantId,
+      tenantId: input.tenantId ?? getActiveTenantId(),
       id: uid('D'),
       status: 'aberta',
       createdAt: t,
@@ -153,7 +154,7 @@ export const jsonRepo = {
       for (const r of rows) {
         const d: Demanda = {
           id: uid('D'),
-          tenantId: config.tenantId,
+          tenantId: getActiveTenantId(),
           tipo: r.tipo,
           bairro: r.bairro,
           prioridade: r.prioridade,
