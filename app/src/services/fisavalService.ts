@@ -26,7 +26,14 @@ import {
 } from '@/db/fotos';
 import { parseDemandasCsvText } from '@/lib/csvParse';
 import { filterDemandas, filterOrdens, getRuntimeTenantId } from '@/lib/tenantFilter';
-import { filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from '@/lib/rota';
+import { estimateRotaStats, filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from '@/lib/rota';
+
+export type OtimizarRotaResult = {
+  paradas: number;
+  distanciaKm: number;
+  duracaoMinEst: number;
+  engine: 'vroom' | 'proximidade';
+};
 import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria, VistoriaFoto } from '@/types';
@@ -201,13 +208,35 @@ export async function getVistoriaForOs(osId: string) {
   return db.vistorias.where('osId').equals(osId).first();
 }
 
-export async function otimizarRotaFiscal(fiscalId: string, start?: GeoPoint): Promise<number> {
-  const ativas = filtrarOsAtivas(await db.ordens.where('fiscalId').equals(fiscalId).toArray());
-  if (ativas.length < 2) return ativas.length;
+export async function otimizarRotaFiscal(
+  fiscalId: string,
+  start?: GeoPoint,
+): Promise<OtimizarRotaResult> {
+  if (isApiMode() && navigator.onLine) {
+    try {
+      const r = await apiClient.otimizarRota(fiscalId, start);
+      for (const o of r.ordens) await db.ordens.put(o);
+      return {
+        paradas: r.paradas,
+        distanciaKm: r.distanciaKm,
+        duracaoMinEst: r.duracaoMinEst,
+        engine: r.engine,
+      };
+    } catch {
+      /* fallback local */
+    }
+  }
+
+  const ativas = filtrarOsAtivas(
+    (await listOrdensTenantScoped()).filter((o) => o.fiscalId === fiscalId),
+  );
+  if (!ativas.length) {
+    return { paradas: 0, distanciaKm: 0, duracaoMinEst: 0, engine: 'proximidade' };
+  }
 
   const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
-
-  const ordered = ordenarPorProximidade(ativas, origin);
+  const ordered = ativas.length >= 2 ? ordenarPorProximidade(ativas, origin) : ativas;
+  const stats = estimateRotaStats(ordered, origin);
   const t = now();
   await db.transaction('rw', [db.ordens], async () => {
     for (let i = 0; i < ordered.length; i++) {
@@ -215,7 +244,7 @@ export async function otimizarRotaFiscal(fiscalId: string, start?: GeoPoint): Pr
     }
   });
   await pushApi();
-  return ordered.length;
+  return { paradas: ordered.length, distanciaKm: stats.distanciaKm, duracaoMinEst: stats.duracaoMinEst, engine: 'proximidade' };
 }
 
 export async function listAllOrdens() {

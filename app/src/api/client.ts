@@ -131,6 +131,21 @@ export const apiClient = {
     api<OrdemServico[]>(fiscalId ? `/ordens?fiscalId=${encodeURIComponent(fiscalId)}` : '/ordens'),
   patchOrdem: (id: string, status: OsStatus) =>
     api<OrdemServico>(`/ordens/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  otimizarRota: (fiscalId: string, start?: { lat: number; lng: number }) =>
+    api<{
+      ordens: OrdemServico[];
+      paradas: number;
+      distanciaKm: number;
+      duracaoMinEst: number;
+      engine: 'vroom' | 'proximidade';
+    }>('/ordens/otimizar-rota', {
+      method: 'POST',
+      body: JSON.stringify({
+        fiscalId,
+        startLat: start?.lat,
+        startLng: start?.lng,
+      }),
+    }),
   homologar: (id: string, aprovado: boolean) =>
     api<{ ok: boolean }>(`/ordens/${id}/homologar`, { method: 'POST', body: JSON.stringify({ aprovado }) }),
   getVistoria: (osId: string) => api<Vistoria | null>(`/vistorias?osId=${encodeURIComponent(osId)}`),

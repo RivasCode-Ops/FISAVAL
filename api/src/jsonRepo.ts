@@ -1,7 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './config.js';
+import { estimateRotaStats, filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from './rota.js';
 import { filterDemandas, filterOrdens, matchesTenant } from './tenant.js';
+import { ordenarComVroom } from './vroom.js';
 import type { ImportRow } from './importCsv.js';
 import type { DbShape, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 
@@ -205,6 +207,57 @@ export const jsonRepo = {
       }
     });
     return loadDb().ordens.find((x) => x.id === id) ?? null;
+  },
+  async otimizarRota(fiscalId: string, start?: GeoPoint) {
+    const db = loadDb();
+    const ativas = filtrarOsAtivas(
+      filterOrdens(db.ordens, db.demandas).filter((o) => o.fiscalId === fiscalId),
+    );
+    if (!ativas.length) {
+      return {
+        ordens: [] as OrdemServico[],
+        paradas: 0,
+        distanciaKm: 0,
+        duracaoMinEst: 0,
+        engine: 'proximidade' as const,
+      };
+    }
+    const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
+    let ordered: OrdemServico[];
+    let engine: 'vroom' | 'proximidade' = 'proximidade';
+    if (config.vroomUrl && ativas.length >= 2) {
+      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas);
+      if (idx) {
+        ordered = idx.map((i) => ativas[i]);
+        engine = 'vroom';
+      } else {
+        ordered = ordenarPorProximidade(ativas, origin);
+      }
+    } else {
+      ordered = ativas.length >= 2 ? ordenarPorProximidade(ativas, origin) : ativas;
+    }
+    const stats = estimateRotaStats(ordered, origin);
+    const t = now();
+    mutate((d) => {
+      for (let i = 0; i < ordered.length; i++) {
+        const o = d.ordens.find((x) => x.id === ordered[i].id);
+        if (o) {
+          o.rotaOrdem = i + 1;
+          o.updatedAt = t;
+        }
+      }
+    });
+    const refreshed = loadDb();
+    const ordens = filterOrdens(refreshed.ordens, refreshed.demandas)
+      .filter((o) => o.fiscalId === fiscalId)
+      .sort((a, b) => a.rotaOrdem - b.rotaOrdem);
+    return {
+      ordens,
+      paradas: ordered.length,
+      distanciaKm: stats.distanciaKm,
+      duracaoMinEst: stats.duracaoMinEst,
+      engine,
+    };
   },
   async homologar(id: string, aprovado: boolean) {
     const t = now();

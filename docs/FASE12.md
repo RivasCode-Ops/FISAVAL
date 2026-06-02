@@ -21,6 +21,6 @@ No **Painel**, fila de homologação → **Imprimir laudo**: PDF via diálogo de
 
 ## Próximo
 
+- Roteirização na API + VROOM — ver [FASE13.md](FASE13.md)
 - Banco isolado por tenant (schema ou instância dedicada)
 - Assinatura ICP-Brasil / gov.br
-- Roteirização VROOM

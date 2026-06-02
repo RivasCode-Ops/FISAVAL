@@ -17,6 +17,8 @@ export const config = {
   vapidSubject: process.env.VAPID_SUBJECT || 'mailto:gestor@fisaval.local',
   municipioNome: process.env.MUNICIPIO_NOME || 'Prefeitura Municipal (demo)',
   tenantId: process.env.TENANT_ID || 'demo',
+  /** URL do serviço VROOM (ex. http://127.0.0.1:3000). Vazio = vizinho mais próximo. */
+  vroomUrl: process.env.VROOM_URL || '',
 };
 
 export const usePostgres = () => !!config.databaseUrl;

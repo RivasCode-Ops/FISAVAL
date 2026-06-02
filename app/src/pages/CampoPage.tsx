@@ -37,6 +37,7 @@ export function CampoPage() {
   const [fotoUrls, setFotoUrls] = useState<Record<string, string>>({});
   const [pushMsg, setPushMsg] = useState('');
   const [assinaturaUrl, setAssinaturaUrl] = useState<string | null>(null);
+  const [rotaResumo, setRotaResumo] = useState<string | null>(null);
 
   useNovasOsAlert(ordens.length, true);
 
@@ -139,8 +140,15 @@ export function CampoPage() {
       navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { timeout: 8000 });
     });
     const start = pos ? { lat: pos.coords.latitude, lng: pos.coords.longitude } : undefined;
-    const n = await otimizarRotaFiscal(session.userId, start);
-    setMsg(n ? `Rota otimizada (${n} paradas).` : 'Nenhuma OS ativa para ordenar.');
+    const r = await otimizarRotaFiscal(session.userId, start);
+    if (r.paradas) {
+      const motor = r.engine === 'vroom' ? 'VROOM' : 'proximidade';
+      setRotaResumo(`~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})`);
+      setMsg(`Rota otimizada: ${r.paradas} parada(s).`);
+    } else {
+      setRotaResumo(null);
+      setMsg('Nenhuma OS ativa para ordenar.');
+    }
     await reload();
   }
 
@@ -154,6 +162,9 @@ export function CampoPage() {
         <button type="button" className="btn btn-outline btn-sm" style={{ marginBottom: '0.5rem' }} onClick={() => void otimizarRota()}>
           Otimizar rota (GPS)
         </button>
+        {rotaResumo && (
+          <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: '0 0 0.5rem' }}>{rotaResumo}</p>
+        )}
         <div className="os-list">
           {ordens.map((o) => (
             <div
@@ -168,6 +179,7 @@ export function CampoPage() {
               <br />
               <small>{o.endereco}</small>
               <br />
+              <span className="badge b-status">#{o.rotaOrdem}</span>{' '}
               <span className="badge b-status">{o.status}</span>
             </div>
           ))}

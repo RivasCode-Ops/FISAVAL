@@ -23,7 +23,12 @@ app.get('/health', (_req, res) => {
 });
 
 app.get('/api/fisaval/config', (_req, res) => {
-  res.json({ municipio: config.municipioNome, tenantId: config.tenantId, version: '0.4' });
+  res.json({
+    municipio: config.municipioNome,
+    tenantId: config.tenantId,
+    version: '0.4',
+    vroom: !!config.vroomUrl,
+  });
 });
 
 app.use('/api/fisaval', createRoutes());

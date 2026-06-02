@@ -3,7 +3,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { config } from './config.js';
+import { estimateRotaStats, filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from './rota.js';
 import { matchesTenant } from './tenant.js';
+import { ordenarComVroom } from './vroom.js';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 import { uid } from './jsonRepo.js';
 
@@ -427,6 +429,43 @@ export const pgRepo = {
     await getPool().query('UPDATE ordens SET status = $2, updated_at = $3 WHERE id = $1', [id, status, t]);
     const { rows } = await getPool().query('SELECT * FROM ordens WHERE id = $1', [id]);
     return rows[0] ? rowOrdem(rows[0]) : null;
+  },
+  async otimizarRota(fiscalId: string, start?: GeoPoint) {
+    const ativas = filtrarOsAtivas(await pgRepo.listOrdens(fiscalId));
+    if (!ativas.length) {
+      return { ordens: [], paradas: 0, distanciaKm: 0, duracaoMinEst: 0, engine: 'proximidade' as const };
+    }
+    const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
+    let ordered: OrdemServico[];
+    let engine: 'vroom' | 'proximidade' = 'proximidade';
+    if (config.vroomUrl && ativas.length >= 2) {
+      const idx = await ordenarComVroom(config.vroomUrl, origin, ativas);
+      if (idx) {
+        ordered = idx.map((i) => ativas[i]);
+        engine = 'vroom';
+      } else {
+        ordered = ordenarPorProximidade(ativas, origin);
+      }
+    } else {
+      ordered = ativas.length >= 2 ? ordenarPorProximidade(ativas, origin) : ativas;
+    }
+    const stats = estimateRotaStats(ordered, origin);
+    const t = now();
+    const pool = getPool();
+    for (let i = 0; i < ordered.length; i++) {
+      await pool.query('UPDATE ordens SET rota_ordem = $2, updated_at = $3 WHERE id = $1', [
+        ordered[i].id,
+        i + 1,
+        t,
+      ]);
+    }
+    return {
+      ordens: await pgRepo.listOrdens(fiscalId),
+      paradas: ordered.length,
+      distanciaKm: stats.distanciaKm,
+      duracaoMinEst: stats.duracaoMinEst,
+      engine,
+    };
   },
   async homologar(id: string, aprovado: boolean) {
     const t = now();

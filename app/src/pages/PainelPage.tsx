@@ -20,6 +20,7 @@ import {
   getVistoriaMapByOs,
   homologar,
   listAllOrdens,
+  otimizarRotaFiscal,
   refreshFromServer,
 } from '@/services/fisavalService';
 
@@ -47,6 +48,8 @@ export function PainelPage() {
   const [filtroFiscal, setFiltroFiscal] = useState('all');
   const [destaqueId, setDestaqueId] = useState<string | null>(null);
   const [assinaturaUrls, setAssinaturaUrls] = useState<Record<string, string>>({});
+  const [rotaFiscalId, setRotaFiscalId] = useState('');
+  const [rotaGestorMsg, setRotaGestorMsg] = useState('');
   const online = useOnline();
 
   const reload = useCallback(async () => {
@@ -107,6 +110,23 @@ export function PainelPage() {
     downloadCsv(`fisaval-os-${suffix}-${stamp}.csv`, buildOrdensCsvRows(lista, vMap));
   }
 
+  async function otimizarRotaGestor() {
+    if (!rotaFiscalId) {
+      setRotaGestorMsg('Selecione um fiscal.');
+      return;
+    }
+    const r = await otimizarRotaFiscal(rotaFiscalId);
+    if (!r.paradas) {
+      setRotaGestorMsg('Nenhuma OS ativa para este fiscal.');
+      return;
+    }
+    const motor = r.engine === 'vroom' ? 'VROOM' : 'proximidade';
+    setRotaGestorMsg(
+      `${r.paradas} parada(s) · ~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})`,
+    );
+    await reload();
+  }
+
   async function imprimirRelatorio() {
     const vMap = await getVistoriaMapByOs();
     printRelatorio({
@@ -141,6 +161,28 @@ export function PainelPage() {
       </div>
 
       <div className="card export-bar">
+        <h2 style={{ margin: '0 0 0.5rem' }}>Roteirização</h2>
+        <div className="export-actions" style={{ marginBottom: '1rem' }}>
+          <select
+            className="input"
+            style={{ maxWidth: '220px' }}
+            value={rotaFiscalId}
+            onChange={(e) => setRotaFiscalId(e.target.value)}
+          >
+            <option value="">Fiscal…</option>
+            {kpis.fiscais.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nome}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-sm" onClick={() => void otimizarRotaGestor()}>
+            Otimizar rota do fiscal
+          </button>
+        </div>
+        {rotaGestorMsg && (
+          <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>{rotaGestorMsg}</p>
+        )}
         <h2 style={{ margin: '0 0 0.5rem' }}>Relatórios</h2>
         <div className="export-actions">
           <button type="button" className="btn btn-sm btn-outline" onClick={() => void exportCsv(ordensMapa, 'filtro')}>

@@ -157,6 +157,33 @@ export function createRoutes(): Router {
   );
 
   router.post(
+    '/ordens/otimizar-rota',
+    requireRoles('fiscal', 'gestor', 'admin'),
+    asyncHandler(async (req, res) => {
+      const { fiscalId, startLat, startLng } = req.body as {
+        fiscalId?: string;
+        startLat?: number;
+        startLng?: number;
+      };
+      const auth = getAuth(req)!;
+      const fid = String(fiscalId || auth.sub);
+      if (auth.role === 'fiscal' && fid !== auth.sub) {
+        res.status(403).json({ error: 'Fiscal só pode otimizar a própria rota' });
+        return;
+      }
+      const start =
+        startLat != null && startLng != null ? { lat: Number(startLat), lng: Number(startLng) } : undefined;
+      const result = await getRepo().otimizarRota(fid, start);
+      logAudit(auditUser(auth), 'rota.otimizar', {
+        entity: 'fiscal',
+        entityId: fid,
+        detail: `${result.engine} · ${result.paradas} paradas · ${result.distanciaKm} km`,
+      });
+      res.json(result);
+    }),
+  );
+
+  router.post(
     '/ordens/:id/homologar',
     asyncHandler(async (req, res) => {
       const { aprovado } = req.body as { aprovado: boolean };

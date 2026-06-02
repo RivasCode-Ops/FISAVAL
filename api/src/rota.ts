@@ -1,19 +1,8 @@
-import type { OrdemServico } from '@/types';
+import type { OrdemServico, OsStatus } from './types.js';
 
 export type GeoPoint = { lat: number; lng: number };
 
-/** Distância aproximada em km (Haversine). */
-export function distKm(a: GeoPoint, b: GeoPoint): number {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
-
-const ATIVAS: OrdemServico['status'][] = [
+const ATIVAS: OsStatus[] = [
   'atribuida',
   'em_campo',
   'check_in',
@@ -26,7 +15,16 @@ export function filtrarOsAtivas(ordens: OrdemServico[]): OrdemServico[] {
   return ordens.filter((o) => ATIVAS.includes(o.status));
 }
 
-/** Vizinho mais próximo a partir de `start` (MVP roteirização). */
+export function distKm(a: GeoPoint, b: GeoPoint): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
 export function ordenarPorProximidade(ordens: OrdemServico[], start: GeoPoint): OrdemServico[] {
   const rest = [...ordens];
   const out: OrdemServico[] = [];
@@ -48,15 +46,8 @@ export function ordenarPorProximidade(ordens: OrdemServico[], start: GeoPoint): 
   return out;
 }
 
-export function mapsDirUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-}
-
-/** Distância total (km) e tempo estimado (~35 km/h). */
-export function estimateRotaStats(
-  ordens: OrdemServico[],
-  start: GeoPoint,
-): { distanciaKm: number; duracaoMinEst: number } {
+/** Distância total (km) e tempo estimado (min) a ~35 km/h urbano. */
+export function estimateRotaStats(ordens: OrdemServico[], start: GeoPoint): { distanciaKm: number; duracaoMinEst: number } {
   if (ordens.length === 0) return { distanciaKm: 0, duracaoMinEst: 0 };
   let km = distKm(start, { lat: ordens[0].lat, lng: ordens[0].lng });
   for (let i = 1; i < ordens.length; i++) {
@@ -65,5 +56,6 @@ export function estimateRotaStats(
       { lat: ordens[i].lat, lng: ordens[i].lng },
     );
   }
-  return { distanciaKm: Math.round(km * 10) / 10, duracaoMinEst: Math.round((km / 35) * 60) };
+  const duracaoMinEst = Math.round((km / 35) * 60);
+  return { distanciaKm: Math.round(km * 10) / 10, duracaoMinEst };
 }
