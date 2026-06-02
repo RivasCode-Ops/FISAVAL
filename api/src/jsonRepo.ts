@@ -167,10 +167,21 @@ export const jsonRepo = {
     });
     return created;
   },
-  async gerarOs(demandaId: string, fiscalId: string, fiscalNome: string) {
+  async gerarOs(
+    demandaId: string,
+    fiscalId: string,
+    fiscalNome: string,
+    janela?: { visitaInicio?: string; visitaFim?: string },
+  ) {
     const db = loadDb();
     const demanda = db.demandas.find((x) => x.id === demandaId);
     if (!demanda || !matchesTenant(demanda.tenantId)) return null;
+    if (config.maxOsAtivasFiscal > 0) {
+      const ativas = filtrarOsAtivas(
+        filterOrdens(db.ordens, db.demandas).filter((o) => o.fiscalId === fiscalId),
+      );
+      if (ativas.length >= config.maxOsAtivasFiscal) return null;
+    }
     const t = now();
     const os: OrdemServico = {
       id: uid('OS'),
@@ -180,6 +191,10 @@ export const jsonRepo = {
       inscricao: demanda.inscricao ?? '—',
       endereco: demanda.endereco ?? demanda.bairro,
       bairro: demanda.bairro,
+      prioridade: demanda.prioridade,
+      prazo: demanda.prazo,
+      visitaInicio: janela?.visitaInicio,
+      visitaFim: janela?.visitaFim,
       status: 'atribuida',
       lat: demanda.lat,
       lng: demanda.lng,
@@ -205,12 +220,17 @@ export const jsonRepo = {
     else list = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return list;
   },
-  async patchOrdem(id: string, status: OsStatus) {
+  async patchOrdem(
+    id: string,
+    patch: { status?: OsStatus; visitaInicio?: string | null; visitaFim?: string | null },
+  ) {
     const t = now();
     mutate((db) => {
       const o = db.ordens.find((x) => x.id === id);
       if (o) {
-        o.status = status;
+        if (patch.status != null) o.status = patch.status;
+        if (patch.visitaInicio !== undefined) o.visitaInicio = patch.visitaInicio ?? undefined;
+        if (patch.visitaFim !== undefined) o.visitaFim = patch.visitaFim ?? undefined;
         o.updatedAt = t;
       }
     });

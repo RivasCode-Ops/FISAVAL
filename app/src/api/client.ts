@@ -122,15 +122,22 @@ export async function apiFotoBlobUrl(fotoId: string): Promise<string> {
 export const apiClient = {
   listDemandas: () => api<Demanda[]>('/demandas'),
   createDemanda: (body: object) => api<Demanda>('/demandas', { method: 'POST', body: JSON.stringify(body) }),
-  gerarOs: (demandaId: string, fiscalId: string, fiscalNome: string) =>
+  gerarOs: (
+    demandaId: string,
+    fiscalId: string,
+    fiscalNome: string,
+    janela?: { visitaInicio?: string; visitaFim?: string },
+  ) =>
     api<OrdemServico>(`/demandas/${demandaId}/gerar-os`, {
       method: 'POST',
-      body: JSON.stringify({ fiscalId, fiscalNome }),
+      body: JSON.stringify({ fiscalId, fiscalNome, ...janela }),
     }),
   listOrdens: (fiscalId?: string) =>
     api<OrdemServico[]>(fiscalId ? `/ordens?fiscalId=${encodeURIComponent(fiscalId)}` : '/ordens'),
-  patchOrdem: (id: string, status: OsStatus) =>
-    api<OrdemServico>(`/ordens/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  patchOrdem: (
+    id: string,
+    patch: { status?: OsStatus; visitaInicio?: string | null; visitaFim?: string | null },
+  ) => api<OrdemServico>(`/ordens/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   otimizarRota: (fiscalId: string, start?: { lat: number; lng: number }) =>
     api<{
       ordens: OrdemServico[];

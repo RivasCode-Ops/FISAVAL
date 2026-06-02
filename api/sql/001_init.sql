@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS ordens (
   bairro TEXT NOT NULL,
   prioridade TEXT,
   prazo TEXT,
+  visita_inicio TEXT,
+  visita_fim TEXT,
   status TEXT NOT NULL,
   lat DOUBLE PRECISION NOT NULL,
   lng DOUBLE PRECISION NOT NULL,

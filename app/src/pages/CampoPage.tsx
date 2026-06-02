@@ -21,6 +21,7 @@ import {
   updateOsStatus,
   uploadFoto,
 } from '@/services/fisavalService';
+import { dentroJanelaVisita, formatJanela } from '@/lib/janela';
 import { distanciaMetros, filtrarOsAtivas, prazoVencido } from '@/lib/rota';
 import { getApiUrl, isApiMode } from '@/api/config';
 import { useNovasOsAlert } from '@/hooks/useNovasOsAlert';
@@ -203,6 +204,15 @@ export function CampoPage() {
               {o.prazo && (
                 <span className={`badge ${prazoVencido(o.prazo) ? 'b-pri-alta' : 'b-status'}`}>
                   {o.prazo.slice(0, 10)}
+                </span>
+              )}{' '}
+              {formatJanela(o.visitaInicio, o.visitaFim) && (
+                <span
+                  className={`badge ${dentroJanelaVisita(o.visitaInicio, o.visitaFim) ? 'b-pri-baixa' : 'b-pri-media'}`}
+                  title="Janela de visita"
+                >
+                  {formatJanela(o.visitaInicio, o.visitaFim)}
+                  {dentroJanelaVisita(o.visitaInicio, o.visitaFim) ? ' · agora' : ''}
                 </span>
               )}{' '}
               <span className="badge b-status">{o.status}</span>

@@ -24,6 +24,8 @@ export function DemandasPage() {
   const [lng, setLng] = useState<number | undefined>();
   const [msg, setMsg] = useState('');
   const [fiscalPadrao, setFiscalPadrao] = useState('');
+  const [visitaInicio, setVisitaInicio] = useState('');
+  const [visitaFim, setVisitaFim] = useState('');
 
   async function reload() {
     if (isApiMode() && navigator.onLine) await refreshFromServer();
@@ -68,7 +70,9 @@ export function DemandasPage() {
     const fiscal = fiscais.find((f) => f.id === fiscalPadrao);
     if (!fiscal) return;
     try {
-      await gerarOs(demandaId, fiscal.id, fiscal.nome);
+      const janela =
+        visitaInicio && visitaFim ? { visitaInicio, visitaFim } : undefined;
+      await gerarOs(demandaId, fiscal.id, fiscal.nome, janela);
       setMsg(`OS gerada para ${fiscal.nome}.`);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Não foi possível gerar a OS.');
@@ -162,6 +166,22 @@ export function DemandasPage() {
           >
             Exportar CSV
           </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+            Janela visita
+            <input
+              type="time"
+              value={visitaInicio}
+              onChange={(e) => setVisitaInicio(e.target.value)}
+              title="Início (opcional)"
+            />
+            <span>–</span>
+            <input
+              type="time"
+              value={visitaFim}
+              onChange={(e) => setVisitaFim(e.target.value)}
+              title="Fim (opcional)"
+            />
+          </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
             Fiscal padrão (OS)
             <select value={fiscalPadrao} onChange={(e) => setFiscalPadrao(e.target.value)}>

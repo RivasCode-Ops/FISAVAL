@@ -170,9 +170,14 @@ export async function createDemanda(input: {
   return d;
 }
 
-export async function gerarOs(demandaId: string, fiscalId: string, fiscalNome: string) {
+export async function gerarOs(
+  demandaId: string,
+  fiscalId: string,
+  fiscalNome: string,
+  janela?: { visitaInicio?: string; visitaFim?: string },
+) {
   if (isApiMode() && navigator.onLine) {
-    const os = await apiClient.gerarOs(demandaId, fiscalId, fiscalNome);
+    const os = await apiClient.gerarOs(demandaId, fiscalId, fiscalNome, janela);
     await db.ordens.put(os);
     const demanda = await db.demandas.get(demandaId);
     if (demanda) await db.demandas.put({ ...demanda, status: 'os_gerada', updatedAt: now() });
@@ -191,6 +196,8 @@ export async function gerarOs(demandaId: string, fiscalId: string, fiscalNome: s
     bairro: demanda.bairro,
     prioridade: demanda.prioridade,
     prazo: demanda.prazo,
+    visitaInicio: janela?.visitaInicio,
+    visitaFim: janela?.visitaFim,
     status: 'atribuida',
     lat: demanda.lat,
     lng: demanda.lng,
@@ -207,7 +214,7 @@ export async function gerarOs(demandaId: string, fiscalId: string, fiscalNome: s
 }
 
 export async function listOrdensFiscal(fiscalId: string) {
-  const list = await db.ordens.where('fiscalId').equals(fiscalId).toArray();
+  const list = (await listOrdensTenantScoped()).filter((o) => o.fiscalId === fiscalId);
   return list.sort((a, b) => a.rotaOrdem - b.rotaOrdem || a.updatedAt.localeCompare(b.updatedAt));
 }
 
@@ -266,7 +273,7 @@ export async function listAllOrdens() {
 
 export async function updateOsStatus(osId: string, status: OsStatus) {
   if (isApiMode() && navigator.onLine) {
-    const os = await apiClient.patchOrdem(osId, status);
+    const os = await apiClient.patchOrdem(osId, { status });
     if (os) await db.ordens.put(os);
     return;
   }
@@ -314,7 +321,7 @@ export async function concluirVistoria(vistoriaId: string, osId: string) {
   const t = now();
   if (isApiMode() && navigator.onLine) {
     await apiClient.patchVistoria(vistoriaId, { concluidaAt: t, syncStatus: 'local' });
-    await apiClient.patchOrdem(osId, 'pendente_sync');
+    await apiClient.patchOrdem(osId, { status: 'pendente_sync' });
     const v = await db.vistorias.get(vistoriaId);
     const o = await db.ordens.get(osId);
     if (v) await db.vistorias.put({ ...v, concluidaAt: t, syncStatus: 'local', updatedAt: t });
@@ -356,7 +363,7 @@ export async function syncPendentes(fiscalId: string): Promise<number> {
           syncStatus: 'synced',
         });
         await db.vistorias.put(synced);
-        const osRemote = await apiClient.patchOrdem(os.id, 'homologacao');
+        const osRemote = await apiClient.patchOrdem(os.id, { status: 'homologacao' });
         await db.ordens.put(osRemote ?? { ...os, status: 'homologacao', updatedAt: t });
         n++;
         continue;

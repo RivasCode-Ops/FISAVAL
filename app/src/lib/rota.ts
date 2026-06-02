@@ -1,3 +1,4 @@
+import { dentroJanelaVisita } from '@/lib/janela';
 import type { OrdemServico, Prioridade } from '@/types';
 
 export type GeoPoint = { lat: number; lng: number };
@@ -34,10 +35,19 @@ function daysUntilPrazo(prazo: string): number {
   return Math.floor((new Date(`${p}T12:00:00`).getTime() - Date.now()) / 86_400_000);
 }
 
-function urgenciaScore(o: { prioridade?: Prioridade; prazo?: string }): number {
+function urgenciaScore(o: {
+  prioridade?: Prioridade;
+  prazo?: string;
+  visitaInicio?: string;
+  visitaFim?: string;
+}): number {
   const pri = o.prioridade ? PRI_RANK[o.prioridade] : 1;
   const days = o.prazo ? daysUntilPrazo(o.prazo) : 30;
-  return pri * 1000 + Math.max(0, days);
+  let score = pri * 1000 + Math.max(0, days);
+  if (o.visitaInicio && o.visitaFim && !dentroJanelaVisita(o.visitaInicio, o.visitaFim)) {
+    score += 5000;
+  }
+  return score;
 }
 
 export function ordenarPorPrazoEProximidade(ordens: OrdemServico[], start: GeoPoint): OrdemServico[] {

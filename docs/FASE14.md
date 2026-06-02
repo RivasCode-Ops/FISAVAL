@@ -29,6 +29,6 @@ Ao gerar OS, retorna **409** se o fiscal já atingiu o limite de OS ativas.
 
 ## Próximo
 
-- Janelas horárias (`visitaInicio` / `visitaFim`) no VROOM
+- Janela horária de visita — ver [FASE15.md](FASE15.md)
 - Banco isolado por tenant
 - Assinatura ICP-Brasil

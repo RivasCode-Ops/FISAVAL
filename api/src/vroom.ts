@@ -1,5 +1,6 @@
-import type { OrdemServico } from './types.js';
+import { vroomTimeWindow } from './janela.js';
 import type { GeoPoint } from './rota.js';
+import type { OrdemServico } from './types.js';
 
 /** Índices de `ordens` na ordem sugerida pelo VROOM, ou null se indisponível. */
 export async function ordenarComVroom(
@@ -11,7 +12,15 @@ export async function ordenarComVroom(
   const url = baseUrl.replace(/\/$/, '');
   const body = {
     vehicles: [{ id: 1, start: [start.lng, start.lat] }],
-    jobs: ordens.map((o, i) => ({ id: i + 1, location: [o.lng, o.lat] })),
+    jobs: ordens.map((o, i) => {
+      const job: { id: number; location: [number, number]; time_windows?: [number, number][] } = {
+        id: i + 1,
+        location: [o.lng, o.lat],
+      };
+      const tw = vroomTimeWindow(o.visitaInicio, o.visitaFim);
+      if (tw) job.time_windows = tw;
+      return job;
+    }),
   };
   try {
     const res = await fetch(url, {

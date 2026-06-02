@@ -40,6 +40,8 @@ export async function initPgSchema() {
   await p.query('ALTER TABLE demandas ADD COLUMN IF NOT EXISTS tenant_id TEXT');
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS prioridade TEXT');
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS prazo TEXT');
+  await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS visita_inicio TEXT');
+  await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS visita_fim TEXT');
 }
 
 type PgQuery = Pick<pg.Pool, 'query'>;
@@ -144,6 +146,8 @@ function rowOrdem(r: Record<string, unknown>): OrdemServico {
     bairro: r.bairro as string,
     prioridade: (r.prioridade as Prioridade) ?? undefined,
     prazo: (r.prazo as string) ?? undefined,
+    visitaInicio: (r.visita_inicio as string) ?? undefined,
+    visitaFim: (r.visita_fim as string) ?? undefined,
     status: r.status as OsStatus,
     lat: Number(r.lat),
     lng: Number(r.lng),
@@ -290,8 +294,8 @@ export const pgRepo = {
         await client.query('DELETE FROM ordens');
         for (const x of partial.ordens) {
           await client.query(
-            `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, status, lat, lng, rota_ordem, created_at, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+            `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, visita_inicio, visita_fim, status, lat, lng, rota_ordem, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
             [
               x.id,
               x.demandaId,
@@ -302,6 +306,8 @@ export const pgRepo = {
               x.bairro,
               x.prioridade ?? null,
               x.prazo ?? null,
+              x.visitaInicio ?? null,
+              x.visitaFim ?? null,
               x.status,
               x.lat,
               x.lng,
@@ -383,7 +389,12 @@ export const pgRepo = {
       ).rows[0] as Record<string, unknown>,
     );
   },
-  async gerarOs(demandaId: string, fiscalId: string, fiscalNome: string) {
+  async gerarOs(
+    demandaId: string,
+    fiscalId: string,
+    fiscalNome: string,
+    janela?: { visitaInicio?: string; visitaFim?: string },
+  ) {
     const dem = (
       await getPool().query('SELECT * FROM demandas WHERE id = $1', [demandaId])
     ).rows[0] as Record<string, unknown> | undefined;
@@ -401,8 +412,8 @@ export const pgRepo = {
       [fiscalId],
     );
     await getPool().query(
-      `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, status, lat, lng, rota_ordem, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'atribuida',$10,$11,$12,$13,$13)`,
+      `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, visita_inicio, visita_fim, status, lat, lng, rota_ordem, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'atribuida',$12,$13,$14,$15,$15)`,
       [
         id,
         demandaId,
@@ -413,6 +424,8 @@ export const pgRepo = {
         dem.bairro,
         demRow.prioridade,
         demRow.prazo,
+        janela?.visitaInicio ?? null,
+        janela?.visitaFim ?? null,
         demRow.lat,
         demRow.lng,
         cnt[0].c + 1,
@@ -443,9 +456,23 @@ export const pgRepo = {
     );
     return rows.map((r) => rowOrdem(r));
   },
-  async patchOrdem(id: string, status: OsStatus) {
+  async patchOrdem(
+    id: string,
+    patch: { status?: OsStatus; visitaInicio?: string | null; visitaFim?: string | null },
+  ) {
     const t = now();
-    await getPool().query('UPDATE ordens SET status = $2, updated_at = $3 WHERE id = $1', [id, status, t]);
+    const cur = (await getPool().query('SELECT * FROM ordens WHERE id = $1', [id])).rows[0] as
+      | Record<string, unknown>
+      | undefined;
+    if (!cur) return null;
+    const status = patch.status ?? (cur.status as OsStatus);
+    const visitaInicio =
+      patch.visitaInicio !== undefined ? patch.visitaInicio : (cur.visita_inicio as string | null);
+    const visitaFim = patch.visitaFim !== undefined ? patch.visitaFim : (cur.visita_fim as string | null);
+    await getPool().query(
+      'UPDATE ordens SET status = $2, visita_inicio = $3, visita_fim = $4, updated_at = $5 WHERE id = $1',
+      [id, status, visitaInicio, visitaFim, t],
+    );
     const { rows } = await getPool().query('SELECT * FROM ordens WHERE id = $1', [id]);
     return rows[0] ? rowOrdem(rows[0]) : null;
   },

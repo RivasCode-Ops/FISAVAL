@@ -13,6 +13,7 @@ import {
 import { logAudit, listAudit } from './audit.js';
 import { parseDemandasCsv } from './importCsv.js';
 import { config } from './config.js';
+import { isHhmm } from './janela.js';
 import { getRepo } from './repo.js';
 import { uid } from './jsonRepo.js';
 import type { AuthPayload } from './auth.js';
@@ -125,7 +126,24 @@ export function createRoutes(): Router {
   router.post(
     '/demandas/:id/gerar-os',
     asyncHandler(async (req, res) => {
-      const { fiscalId, fiscalNome } = req.body as { fiscalId: string; fiscalNome: string };
+      const { fiscalId, fiscalNome, visitaInicio, visitaFim } = req.body as {
+        fiscalId: string;
+        fiscalNome: string;
+        visitaInicio?: string;
+        visitaFim?: string;
+      };
+      if (visitaInicio && !isHhmm(visitaInicio)) {
+        res.status(400).json({ error: 'visitaInicio inválido (use HH:mm)' });
+        return;
+      }
+      if (visitaFim && !isHhmm(visitaFim)) {
+        res.status(400).json({ error: 'visitaFim inválido (use HH:mm)' });
+        return;
+      }
+      if ((visitaInicio && !visitaFim) || (!visitaInicio && visitaFim)) {
+        res.status(400).json({ error: 'Informe visitaInicio e visitaFim juntos' });
+        return;
+      }
       const repo = getRepo();
       const demandas = await repo.listDemandas();
       const demanda = demandas.find((d) => d.id === req.params.id);
@@ -143,7 +161,10 @@ export function createRoutes(): Router {
           return;
         }
       }
-      const os = await repo.gerarOs(req.params.id, fiscalId, fiscalNome);
+      const os = await repo.gerarOs(req.params.id, fiscalId, fiscalNome, {
+        visitaInicio,
+        visitaFim,
+      });
       if (!os) {
         res.status(404).json({ error: 'Não foi possível gerar a OS' });
         return;
@@ -168,8 +189,25 @@ export function createRoutes(): Router {
   router.patch(
     '/ordens/:id',
     asyncHandler(async (req, res) => {
-      const { status } = req.body as { status: OsStatus };
-      res.json(await getRepo().patchOrdem(req.params.id, status));
+      const { status, visitaInicio, visitaFim } = req.body as {
+        status?: OsStatus;
+        visitaInicio?: string | null;
+        visitaFim?: string | null;
+      };
+      if (visitaInicio && !isHhmm(visitaInicio)) {
+        res.status(400).json({ error: 'visitaInicio inválido (use HH:mm)' });
+        return;
+      }
+      if (visitaFim && !isHhmm(visitaFim)) {
+        res.status(400).json({ error: 'visitaFim inválido (use HH:mm)' });
+        return;
+      }
+      const os = await getRepo().patchOrdem(req.params.id, { status, visitaInicio, visitaFim });
+      if (!os) {
+        res.status(404).json({ error: 'OS não encontrada' });
+        return;
+      }
+      res.json(os);
     }),
   );
 

@@ -309,6 +309,7 @@ export function PainelPage() {
                   <br />
                   <small>
                     {o.endereco} · {o.fiscalNome}
+                    {o.visitaInicio && o.visitaFim ? ` · ${o.visitaInicio}–${o.visitaFim}` : ''}
                   </small>
                   {v && (
                     <p style={{ fontSize: '0.85rem', margin: '0.35rem 0', color: 'var(--muted)' }}>
