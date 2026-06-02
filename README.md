@@ -4,15 +4,18 @@ Sistema de fiscalização de campo para secretarias de finanças e cadastro imob
 
 **Repositório:** [github.com/RivasCode-Ops/FISAVAL](https://github.com/RivasCode-Ops/FISAVAL)
 
-## Demo online (piloto — sem programar servidor)
+## App funcionando (PWA + offline)
 
-| Item | Onde |
-|------|------|
-| Site estático | Pasta [`docs/`](docs/) — abra `docs/index.html` no navegador para testar local |
-| Publicar grátis | [docs/DEPLOY.md](docs/DEPLOY.md) — GitHub Pages, pasta `/docs`, **sem npm** |
-| Script rápido | `.\scripts\publicar-demo.ps1` (requer `gh auth login`) |
+| Comando | O que faz |
+|---------|-----------|
+| `cd app && npm install && npm run dev` | App local em http://127.0.0.1:5192 |
+| `npm run build:pages` (na raiz) | Gera `app/dist` e copia para `docs/` (Pages) |
 
-URL após publicar: `https://rivascode-ops.github.io/FISAVAL/`
+**Logins demo:** `gestor@demo` / `fiscal@demo` — senha `demo123`
+
+Módulos: **Demandas + OS**, **Campo** (mapa, GPS, checklist, sync), **Painel** (KPIs, homologação).
+
+Publicar: [docs/DEPLOY.md](docs/DEPLOY.md) — **https://rivascode-ops.github.io/FISAVAL/**
 
 ---
 

@@ -3,3 +3,7 @@ Thumbs.db
 *.log
 .env
 .env.*
+node_modules/
+app/dist/
+api/dist/
+api/data/
