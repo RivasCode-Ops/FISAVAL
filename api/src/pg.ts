@@ -16,7 +16,8 @@ import { countVisitasHoje } from './fiscal.js';
 import { skillsForFiscal } from './tipoVistoria.js';
 import { ordenarComVroom } from './vroom.js';
 import { tenantUploadsDir } from './tenantPaths.js';
-import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
+import { vistoriaTemAssinatura } from './vistoriaAssinatura.js';
+import type { AssinaturaModo, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
 import { uid } from './jsonRepo.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -49,6 +50,8 @@ export async function initPgSchema() {
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS visita_inicio TEXT');
   await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS visita_fim TEXT');
   await p.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS tipos_habilitados JSONB');
+  await p.query('ALTER TABLE vistorias ADD COLUMN IF NOT EXISTS assinatura_modo TEXT');
+  await p.query('ALTER TABLE vistorias ADD COLUMN IF NOT EXISTS assinatura_ref TEXT');
 }
 
 type PgQuery = Pick<pg.Pool, 'query'>;
@@ -178,6 +181,8 @@ function rowVistoria(r: Record<string, unknown>): Vistoria {
     concluidaAt: r.concluida_at ? new Date(r.concluida_at as string).toISOString() : undefined,
     assinaturaAt: r.assinatura_at ? new Date(r.assinatura_at as string).toISOString() : undefined,
     assinaturaNome: (r.assinatura_nome as string) ?? undefined,
+    assinaturaModo: (r.assinatura_modo as AssinaturaModo) ?? undefined,
+    assinaturaRef: (r.assinatura_ref as string) ?? undefined,
     syncStatus: r.sync_status as Vistoria['syncStatus'],
     createdAt: new Date(r.created_at as string).toISOString(),
     updatedAt: new Date(r.updated_at as string).toISOString(),
@@ -647,7 +652,7 @@ export const pgRepo = {
     await getPool().query(
       `UPDATE vistorias SET checklist = $2, divergencia = $3, justificativa = $4,
        check_in_lat = $5, check_in_lng = $6, check_in_at = $7, concluida_at = $8, sync_status = $9,
-       assinatura_at = $10, assinatura_nome = $11, updated_at = $12
+       assinatura_at = $10, assinatura_nome = $11, assinatura_modo = $12, assinatura_ref = $13, updated_at = $14
        WHERE id = $1`,
       [
         id,
@@ -661,6 +666,8 @@ export const pgRepo = {
         merged.syncStatus,
         merged.assinaturaAt ?? null,
         merged.assinaturaNome ?? null,
+        merged.assinaturaModo ?? null,
+        merged.assinaturaRef ?? null,
         t,
       ],
     );
@@ -669,8 +676,10 @@ export const pgRepo = {
   assinaturaPath(vistoriaId: string) {
     return join(tenantUploadsDir(), vistoriaId, 'assinatura.png');
   },
-  hasAssinatura(vistoriaId: string) {
-    return existsSync(this.assinaturaPath(vistoriaId));
+  async hasAssinatura(vistoriaId: string) {
+    const { rows } = await getPool().query('SELECT * FROM vistorias WHERE id = $1', [vistoriaId]);
+    const v = rows[0] ? rowVistoria(rows[0] as Record<string, unknown>) : null;
+    return vistoriaTemAssinatura(v, existsSync(this.assinaturaPath(vistoriaId)));
   },
   async saveAssinatura(vistoriaId: string, fiscalNome: string, buffer: Buffer) {
     mkdirSync(join(tenantUploadsDir(), vistoriaId), { recursive: true });
@@ -678,6 +687,21 @@ export const pgRepo = {
     return this.patchVistoria(vistoriaId, {
       assinaturaAt: now(),
       assinaturaNome: fiscalNome,
+      assinaturaModo: 'canvas',
+      assinaturaRef: undefined,
+    });
+  },
+  async saveAssinaturaCertificada(
+    vistoriaId: string,
+    fiscalNome: string,
+    modo: AssinaturaModo,
+    ref: string,
+  ) {
+    return this.patchVistoria(vistoriaId, {
+      assinaturaAt: now(),
+      assinaturaNome: fiscalNome,
+      assinaturaModo: modo,
+      assinaturaRef: ref,
     });
   },
   async addFoto(foto: VistoriaFoto) {

@@ -15,8 +15,20 @@ import {
 import { filterDemandas, filterOrdens, matchesTenant } from './tenant.js';
 import { skillsForFiscal } from './tipoVistoria.js';
 import { ordenarComVroom } from './vroom.js';
+import { buildTenantSeed } from './tenantSeed.js';
+import { vistoriaTemAssinatura } from './vistoriaAssinatura.js';
 import type { ImportRow } from './importCsv.js';
-import type { DbShape, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
+import type {
+  AssinaturaModo,
+  DbShape,
+  Demanda,
+  OrdemServico,
+  OsStatus,
+  Prioridade,
+  User,
+  Vistoria,
+  VistoriaFoto,
+} from './types.js';
 
 const dbPath = () => tenantDbPath();
 
@@ -43,73 +55,9 @@ export function saveDb(db: DbShape) {
 export function seedJson(): DbShape {
   const db = loadDb();
   if (db.users.length > 0) return db;
-  const t = now();
-  db.users = [
-    { id: 'u-gestor', email: 'gestor@demo', nome: 'Gestor Finanças', role: 'gestor', senha: 'demo123' },
-    { id: 'u-fiscal1', email: 'fiscal@demo', nome: 'Ana Silva', role: 'fiscal', senha: 'demo123' },
-    {
-      id: 'u-fiscal2',
-      email: 'carlos@demo',
-      nome: 'Carlos Mendes',
-      role: 'fiscal',
-      senha: 'demo123',
-      tiposHabilitados: ['Denúncia'],
-    },
-    { id: 'u-admin', email: 'admin@demo', nome: 'Administrador', role: 'admin', senha: 'demo123' },
-  ];
-  db.demandas = [
-    {
-      id: 'D-1042',
-      tipo: 'Revisão cadastral',
-      bairro: 'Centro',
-      prioridade: 'alta',
-      prazo: '2026-06-05',
-      status: 'os_gerada',
-      inscricao: '12.034.0056.0001',
-      endereco: 'R. das Flores, 123',
-      lat: -23.5505,
-      lng: -46.6333,
-      createdAt: t,
-      updatedAt: t,
-    },
-    {
-      id: 'D-1043',
-      tipo: 'Denúncia',
-      bairro: 'Vila Nova',
-      prioridade: 'alta',
-      prazo: '2026-06-04',
-      status: 'aberta',
-      inscricao: '12.034.0089.0012',
-      endereco: 'Av. Brasil, 890',
-      lat: -23.552,
-      lng: -46.631,
-      createdAt: t,
-      updatedAt: t,
-    },
-  ];
-  db.ordens = [
-    {
-      id: 'OS-8821',
-      demandaId: 'D-1042',
-      fiscalId: 'u-fiscal1',
-      fiscalNome: 'Ana Silva',
-      inscricao: '12.034.0056.0001',
-      endereco: 'R. das Flores, 123',
-      bairro: 'Centro',
-      prioridade: 'alta',
-      prazo: '2026-06-05',
-      status: 'atribuida',
-      lat: -23.5505,
-      lng: -46.6333,
-      rotaOrdem: 1,
-      createdAt: t,
-      updatedAt: t,
-    },
-  ];
-  db.vistorias = [];
-  db.fotos = [];
-  saveDb(db);
-  return db;
+  const seeded = buildTenantSeed(getActiveTenantId());
+  saveDb(seeded);
+  return seeded;
 }
 
 export const jsonRepo = {
@@ -388,14 +336,34 @@ export const jsonRepo = {
     return join(tenantUploadsDir(), vistoriaId, 'assinatura.png');
   },
   hasAssinatura(vistoriaId: string) {
-    return existsSync(this.assinaturaPath(vistoriaId));
+    const v = loadDb().vistorias.find((x) => x.id === vistoriaId);
+    return vistoriaTemAssinatura(v, existsSync(this.assinaturaPath(vistoriaId)));
   },
   async saveAssinatura(vistoriaId: string, fiscalNome: string, buffer: Buffer) {
     const t = now();
     const p = this.assinaturaPath(vistoriaId);
     mkdirSync(join(tenantUploadsDir(), vistoriaId), { recursive: true });
     writeFileSync(p, buffer);
-    return this.patchVistoria(vistoriaId, { assinaturaAt: t, assinaturaNome: fiscalNome });
+    return this.patchVistoria(vistoriaId, {
+      assinaturaAt: t,
+      assinaturaNome: fiscalNome,
+      assinaturaModo: 'canvas',
+      assinaturaRef: undefined,
+    });
+  },
+  async saveAssinaturaCertificada(
+    vistoriaId: string,
+    fiscalNome: string,
+    modo: AssinaturaModo,
+    ref: string,
+  ) {
+    const t = now();
+    return this.patchVistoria(vistoriaId, {
+      assinaturaAt: t,
+      assinaturaNome: fiscalNome,
+      assinaturaModo: modo,
+      assinaturaRef: ref,
+    });
   },
   async getUserById(id: string) {
     const u = loadDb().users.find((x) => x.id === id);

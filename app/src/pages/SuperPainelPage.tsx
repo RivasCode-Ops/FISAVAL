@@ -99,6 +99,18 @@ export function SuperPainelPage() {
               <td>{r.fiscaisAtivos}</td>
             </tr>
           ))}
+          {rows.length > 0 && (
+            <tr style={{ fontWeight: 600, background: 'var(--surface-2, rgba(0,0,0,0.04))' }}>
+              <td colSpan={2}>Total</td>
+              <td>{rows.reduce((s, r) => s + r.osHoje, 0)}</td>
+              <td>{rows.reduce((s, r) => s + r.concluidas, 0)}</td>
+              <td>{rows.reduce((s, r) => s + r.homolog, 0)}</td>
+              <td>{rows.reduce((s, r) => s + r.divergencias, 0)}</td>
+              <td>{rows.reduce((s, r) => s + r.visitasHoje, 0)}</td>
+              <td>{rows.reduce((s, r) => s + r.prazoVencido, 0)}</td>
+              <td>{rows.reduce((s, r) => s + r.fiscaisAtivos, 0)}</td>
+            </tr>
+          )}
         </tbody>
       </table>
       {!rows.length && !loading && !erro && <p style={{ color: 'var(--muted)' }}>Nenhum tenant cadastrado.</p>}

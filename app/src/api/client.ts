@@ -180,6 +180,11 @@ export const apiClient = {
       fiscalNome: string | null;
       carga: { ativas: number; visitasHoje: number } | null;
     }>(`/fiscais/sugerir?tipo=${encodeURIComponent(tipo)}`),
+  registrarAssinaturaCertificada: (vistoriaId: string, modo: 'icp' | 'govbr', ref?: string) =>
+    api<{ ok: boolean; ref: string; modo: string; vistoria: Vistoria }>(
+      `/vistorias/${vistoriaId}/assinatura/certificada`,
+      { method: 'POST', body: JSON.stringify({ modo, ref }) },
+    ),
   superOverview: () =>
     api<{
       generatedAt: string;

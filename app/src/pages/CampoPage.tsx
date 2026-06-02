@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { OrdemServico, Vistoria } from '@/types';
-import { AssinaturaPad } from '@/components/AssinaturaPad';
+import type { AssinaturaModo, OrdemServico, Vistoria } from '@/types';
+import { AssinaturaPanel } from '@/components/AssinaturaPanel';
 import { RotaMap } from '@/components/RotaMap';
 import { mapsDirUrl } from '@/lib/rota';
 import { useAuthStore } from '@/store/authStore';
@@ -12,6 +12,7 @@ import {
   getFotoDisplayUrl,
   getOrCreateVistoria,
   hasAssinatura,
+  registrarAssinaturaCertificada,
   saveAssinatura,
   listFotos,
   listOrdensFiscal,
@@ -24,6 +25,7 @@ import {
 import { dentroJanelaVisita, formatJanela } from '@/lib/janela';
 import { distanciaMetros, filtrarOsAtivas, prazoVencido } from '@/lib/rota';
 import { getApiUrl, isApiMode } from '@/api/config';
+import { getStoredTenantId } from '@/api/tenantStorage';
 import { useNovasOsAlert } from '@/hooks/useNovasOsAlert';
 import { subscribeWebPush } from '@/lib/push';
 
@@ -40,17 +42,28 @@ export function CampoPage() {
   const [assinaturaUrl, setAssinaturaUrl] = useState<string | null>(null);
   const [rotaResumo, setRotaResumo] = useState<string | null>(null);
   const [checkinRadiusM, setCheckinRadiusM] = useState(200);
+  const [assinaturaModos, setAssinaturaModos] = useState<AssinaturaModo[]>(['canvas']);
+  const [assinaturaPadrao, setAssinaturaPadrao] = useState<AssinaturaModo>('canvas');
 
   useNovasOsAlert(ordens.length, true);
 
   useEffect(() => {
     const base = getApiUrl();
     if (!base) return;
-    void fetch(`${base}/api/fisaval/config`)
+    const tid = getStoredTenantId();
+    void fetch(`${base}/api/fisaval/config`, { headers: tid ? { 'X-Tenant-Id': tid } : {} })
       .then((r) => r.json())
-      .then((c: { checkinRadiusM?: number }) => {
-        if (c.checkinRadiusM != null) setCheckinRadiusM(c.checkinRadiusM);
-      })
+      .then(
+        (c: {
+          checkinRadiusM?: number;
+          assinaturaModos?: AssinaturaModo[];
+          assinaturaPadrao?: AssinaturaModo;
+        }) => {
+          if (c.checkinRadiusM != null) setCheckinRadiusM(c.checkinRadiusM);
+          if (c.assinaturaModos?.length) setAssinaturaModos(c.assinaturaModos);
+          if (c.assinaturaPadrao) setAssinaturaPadrao(c.assinaturaPadrao);
+        },
+      )
       .catch(() => {});
   }, []);
 
@@ -294,13 +307,30 @@ export function CampoPage() {
               ))}
             </div>
           )}
-          <AssinaturaPad
+          <AssinaturaPanel
             nomeFiscal={session.nome}
+            modos={assinaturaModos}
+            padrao={assinaturaPadrao}
             initialUrl={assinaturaUrl}
-            onSave={(blob) => {
+            certificadaModo={
+              vistoria?.assinaturaModo === 'icp' || vistoria?.assinaturaModo === 'govbr'
+                ? vistoria.assinaturaModo
+                : undefined
+            }
+            certificadaRef={vistoria?.assinaturaRef}
+            onSaveCanvas={(blob) => {
               void saveAssinatura(vistoria!.id, session.nome, blob).then(async () => {
+                const v = await getOrCreateVistoria(selected!.id);
+                setVistoria(v);
                 setAssinaturaUrl(await getAssinaturaDisplayUrl(vistoria!.id));
                 setMsg('Assinatura salva.');
+              });
+            }}
+            onSaveCertificada={(modo) => {
+              void registrarAssinaturaCertificada(vistoria!.id, session.nome, modo).then((v) => {
+                if (v) setVistoria(v);
+                setAssinaturaUrl(null);
+                setMsg(`Assinatura ${modo === 'icp' ? 'ICP-Brasil' : 'gov.br'} registrada (demo).`);
               });
             }}
           />

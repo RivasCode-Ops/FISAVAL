@@ -44,6 +44,7 @@ export type OtimizarRotaResult = {
 };
 import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
+import { vistoriaTemAssinatura } from '@/lib/vistoriaAssinatura';
 import { buildFiscalCargaLocal, pickFiscalIdLocal } from '@/lib/sugerirFiscal';
 import { fiscalHandlesTipo } from '@/lib/tipoVistoria';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from '@/types';
@@ -401,15 +402,45 @@ export async function syncPendentes(fiscalId: string): Promise<number> {
 }
 
 export async function hasAssinatura(vistoriaId: string): Promise<boolean> {
-  const local = await getAssinatura(vistoriaId);
-  if (local) return true;
   const v = await db.vistorias.get(vistoriaId);
-  if (v?.assinaturaAt) return true;
+  const local = await getAssinatura(vistoriaId);
+  if (vistoriaTemAssinatura(v, !!local)) return true;
   if (isApiMode() && navigator.onLine) {
     const url = await apiAssinaturaBlobUrl(vistoriaId);
-    return !!url;
+    return vistoriaTemAssinatura(v, !!url);
   }
   return false;
+}
+
+export async function registrarAssinaturaCertificada(
+  vistoriaId: string,
+  fiscalNome: string,
+  modo: 'icp' | 'govbr',
+): Promise<Vistoria | null> {
+  const t = now();
+  if (isApiMode() && navigator.onLine) {
+    try {
+      const r = await apiClient.registrarAssinaturaCertificada(vistoriaId, modo);
+      await db.vistorias.put(r.vistoria);
+      return r.vistoria;
+    } catch {
+      /* local */
+    }
+  }
+  const v = await db.vistorias.get(vistoriaId);
+  if (!v) return null;
+  const ref = `DEMO-${modo.toUpperCase()}-${Date.now().toString(36)}`;
+  const next: Vistoria = {
+    ...v,
+    assinaturaAt: t,
+    assinaturaNome: fiscalNome,
+    assinaturaModo: modo,
+    assinaturaRef: ref,
+    updatedAt: t,
+  };
+  await db.vistorias.put(next);
+  await pushApi();
+  return next;
 }
 
 export async function getAssinaturaDisplayUrl(vistoriaId: string): Promise<string | null> {
@@ -425,6 +456,8 @@ export async function saveAssinatura(vistoriaId: string, fiscalNome: string, blo
   await db.vistorias.update(vistoriaId, {
     assinaturaAt: t,
     assinaturaNome: fiscalNome,
+    assinaturaModo: 'canvas',
+    assinaturaRef: undefined,
     updatedAt: t,
   });
   if (isApiMode() && navigator.onLine) {

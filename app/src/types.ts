@@ -4,6 +4,8 @@ export type Prioridade = 'alta' | 'media' | 'baixa';
 
 export type DemandaStatus = 'aberta' | 'os_gerada' | 'concluida';
 
+export type AssinaturaModo = 'canvas' | 'icp' | 'govbr';
+
 export type OsStatus =
   | 'atribuida'
   | 'em_campo'
@@ -74,6 +76,8 @@ export interface Vistoria {
   concluidaAt?: string;
   assinaturaAt?: string;
   assinaturaNome?: string;
+  assinaturaModo?: AssinaturaModo;
+  assinaturaRef?: string;
   syncStatus: 'local' | 'synced';
   createdAt: string;
   updatedAt: string;

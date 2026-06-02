@@ -4,6 +4,7 @@ import { createRoutes } from './routes.js';
 import { config, usePostgres } from './config.js';
 import { ensureStorage } from './repo.js';
 import { getActiveMunicipioNome, getActiveTenantId, tenantMiddleware } from './tenantContext.js';
+import { assinaturaPadrao, listAssinaturaModos } from './assinaturaConfig.js';
 import { listTenants } from './tenantRegistry.js';
 
 const app = express();
@@ -43,6 +44,8 @@ app.get('/api/fisaval/config', tenantMiddleware, (_req, res) => {
     maxVisitasDiaFiscal: config.maxVisitasDiaFiscal,
     tenantIsolated: process.env.TENANT_ISOLATED !== '0' && process.env.TENANT_ISOLATED !== 'false',
     multiTenant: config.multiTenant,
+    assinaturaModos: listAssinaturaModos(),
+    assinaturaPadrao: assinaturaPadrao(),
   });
 });
 

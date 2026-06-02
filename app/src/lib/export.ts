@@ -1,3 +1,4 @@
+import { labelAssinaturaModo } from '@/lib/vistoriaAssinatura';
 import type { Demanda, OrdemServico, Vistoria } from '@/types';
 import { CHECKLIST_ITEMS } from '@/services/fisavalService';
 
@@ -180,9 +181,13 @@ export function printHomologacaoLaudo(data: LaudoHomologacaoPayload) {
   const checks = CHECKLIST_ITEMS.filter((c) => data.vistoria.checklist[c.id])
     .map((c) => c.label)
     .join(', ');
-  const assinaturaBlock = data.assinaturaUrl
-    ? `<img src="${data.assinaturaUrl}" alt="Assinatura" style="max-width:280px;border:1px solid #ccc;border-radius:4px"/>`
-    : '<p style="color:#888">Assinatura não disponível neste dispositivo.</p>';
+  const certificada =
+    data.vistoria.assinaturaModo === 'icp' || data.vistoria.assinaturaModo === 'govbr';
+  const assinaturaBlock = certificada
+    ? `<p><strong>${labelAssinaturaModo(data.vistoria)}</strong></p><p style="font-size:0.85rem;color:#555">Assinatura digital certificada (sem imagem PNG).</p>`
+    : data.assinaturaUrl
+      ? `<img src="${data.assinaturaUrl}" alt="Assinatura" style="max-width:280px;border:1px solid #ccc;border-radius:4px"/>`
+      : '<p style="color:#888">Assinatura não disponível neste dispositivo.</p>';
   const meta = [data.municipio, data.tenantId].filter(Boolean).join(' · ');
 
   w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head>

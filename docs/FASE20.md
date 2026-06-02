@@ -39,6 +39,5 @@ Login `admin@demo` / `demo123` → aba **Global**.
 
 ## Próximo
 
-- Assinatura ICP-Brasil / gov.br (integração ou stub documentado)
-- Provisionar tenant `paulinia-sp` com seed automático
+- Seed Paulínia e assinatura ICP/gov.br — ver [FASE21.md](FASE21.md)
 - Alertas cross-tenant (prazo vencido agregado)

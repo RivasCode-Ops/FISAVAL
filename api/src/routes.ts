@@ -378,6 +378,56 @@ export function createRoutes(): Router {
     }),
   );
 
+  router.post(
+    '/vistorias/:id/assinatura/certificada',
+    requireRoles('fiscal'),
+    asyncHandler(async (req, res) => {
+      const { modo, ref } = req.body as { modo?: string; ref?: string };
+      const {
+        listAssinaturaModos,
+        isCertificadaModo,
+        demoCertificadaRef,
+      } = await import('./assinaturaConfig.js');
+      if (!modo || !isCertificadaModo(modo)) {
+        res.status(400).json({ error: 'modo deve ser icp ou govbr' });
+        return;
+      }
+      if (!listAssinaturaModos().includes(modo)) {
+        res.status(400).json({ error: `Modo ${modo} não habilitado nesta instância` });
+        return;
+      }
+      const repo = getRepo();
+      if (!('saveAssinaturaCertificada' in repo)) {
+        res.status(501).json({ error: 'Assinatura certificada não suportada' });
+        return;
+      }
+      const vistoriaId = req.params.id;
+      const vList = (await repo.bootstrap()).vistorias;
+      if (!vList.find((v) => v.id === vistoriaId)) {
+        res.status(404).json({ error: 'Vistoria não encontrada' });
+        return;
+      }
+      const auth = getAuth(req)!;
+      const refFinal = ref?.trim() || demoCertificadaRef(modo);
+      const v = await (
+        repo as {
+          saveAssinaturaCertificada: (
+            id: string,
+            nome: string,
+            m: 'icp' | 'govbr',
+            r: string,
+          ) => Promise<Vistoria | null>;
+        }
+      ).saveAssinaturaCertificada(vistoriaId, auth.nome, modo, refFinal);
+      logAudit(auditUser(auth), 'vistoria.assinatura.certificada', {
+        entity: 'vistoria',
+        entityId: vistoriaId,
+        detail: `${modo}:${refFinal}`,
+      });
+      res.json({ ok: true, vistoria: v, ref: refFinal, modo });
+    }),
+  );
+
   router.get(
     '/vistorias/:id/assinatura/file',
     asyncHandler(async (req, res) => {

@@ -12,6 +12,7 @@ import {
   printRelatorio,
 } from '@/lib/export';
 import { getRuntimeTenantId } from '@/lib/tenantFilter';
+import { labelAssinaturaModo } from '@/lib/vistoriaAssinatura';
 import { labelTiposHabilitados, TIPOS_VISTORIA } from '@/lib/tipoVistoria';
 import {
   CHECKLIST_ITEMS,
@@ -416,6 +417,8 @@ export function PainelPage() {
                       {checks.length > 0 && ` · ${checks.length} itens OK`}
                     {v.concluidaAt && ` · ${new Date(v.concluidaAt).toLocaleString('pt-BR')}`}
                     {v.assinaturaNome && ` · Ass.: ${v.assinaturaNome}`}
+                    {(v.assinaturaModo === 'icp' || v.assinaturaModo === 'govbr') &&
+                      ` · ${labelAssinaturaModo(v)}`}
                   </p>
                 )}
                 {assinaturaUrls[o.id] && (
