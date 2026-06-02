@@ -7,6 +7,7 @@ import type { Session, UserRole } from '@/types';
 
 type AuthState = {
   session: Session | null;
+  token: string | null;
   login: (email: string, senha: string) => Promise<boolean>;
   logout: () => void;
   hasRole: (...roles: UserRole[]) => boolean;
@@ -16,14 +17,15 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       session: null,
+      token: null,
       async login(email, senha) {
         const normalized = email.trim().toLowerCase();
 
         if (isApiMode() && navigator.onLine) {
           try {
-            const { user } = await apiLogin(normalized, senha);
-            await hydrateDexieFromApi();
+            const { user, token } = await apiLogin(normalized, senha);
             set({
+              token,
               session: {
                 userId: user.id,
                 email: user.email,
@@ -31,6 +33,7 @@ export const useAuthStore = create<AuthState>()(
                 role: user.role,
               },
             });
+            await hydrateDexieFromApi();
             return true;
           } catch {
             /* tenta local */
@@ -40,6 +43,7 @@ export const useAuthStore = create<AuthState>()(
         const user = await db.users.where('email').equals(normalized).first();
         if (!user || user.senha !== senha) return false;
         set({
+          token: null,
           session: {
             userId: user.id,
             email: user.email,
@@ -49,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
         });
         return true;
       },
-      logout: () => set({ session: null }),
+      logout: () => set({ session: null, token: null }),
       hasRole: (...roles) => {
         const s = get().session;
         return !!s && roles.includes(s.role);

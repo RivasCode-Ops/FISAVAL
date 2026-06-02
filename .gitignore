@@ -8,3 +8,4 @@ app/dist/
 api/dist/
 api/data/
 !api/data/.gitkeep
+api/uploads/

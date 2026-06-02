@@ -1,232 +1,230 @@
 import { Router } from 'express';
-import {
-  ensureSeed,
-  loadDb,
-  mutate,
-  uid,
-  type Demanda,
-  type OrdemServico,
-  type OsStatus,
-  type Prioridade,
-  type Vistoria,
-} from './store.js';
+import multer from 'multer';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { authRequired, signToken } from './auth.js';
+import { config } from './config.js';
+import { getRepo } from './repo.js';
+import { uid } from './jsonRepo.js';
+import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria } from './types.js';
 
-const now = () => new Date().toISOString();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+
+function asyncHandler(
+  fn: (req: import('express').Request, res: import('express').Response) => Promise<void>,
+) {
+  return (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
+    void fn(req, res).catch((err) => {
+      console.error(err);
+      res.status(500).json({ error: 'Erro interno' });
+    });
+  };
+}
 
 export function createRoutes(): Router {
   const router = Router();
-  ensureSeed();
+  mkdirSync(config.uploadsDir, { recursive: true });
 
-  router.post('/auth/login', (req, res) => {
-    const { email, senha } = req.body as { email?: string; senha?: string };
-    const db = loadDb();
-    const user = db.users.find((u) => u.email === String(email || '').trim().toLowerCase());
-    if (!user || user.senha !== senha) {
-      res.status(401).json({ error: 'Credenciais inválidas' });
-      return;
-    }
-    res.json({
-      user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
-    });
-  });
-
-  router.get('/bootstrap', (_req, res) => {
-    const db = loadDb();
-    res.json({
-      users: db.users.map(({ senha: _, ...u }) => u),
-      demandas: db.demandas,
-      ordens: db.ordens,
-      vistorias: db.vistorias,
-    });
-  });
-
-  router.post('/sync/replace', (req, res) => {
-    const body = req.body as {
-      demandas?: Demanda[];
-      ordens?: OrdemServico[];
-      vistorias?: Vistoria[];
-    };
-    mutate((db) => {
-      if (body.demandas) db.demandas = body.demandas;
-      if (body.ordens) db.ordens = body.ordens;
-      if (body.vistorias) db.vistorias = body.vistorias;
-    });
-    res.json({ ok: true });
-  });
-
-  router.get('/demandas', (_req, res) => {
-    res.json(loadDb().demandas);
-  });
-
-  router.post('/demandas', (req, res) => {
-    const input = req.body as {
-      tipo: string;
-      bairro: string;
-      prioridade: Prioridade;
-      prazo: string;
-      endereco?: string;
-      inscricao?: string;
-      lat?: number;
-      lng?: number;
-    };
-    const t = now();
-    const d: Demanda = {
-      id: uid('D'),
-      tipo: input.tipo,
-      bairro: input.bairro,
-      prioridade: input.prioridade,
-      prazo: input.prazo,
-      status: 'aberta',
-      endereco: input.endereco,
-      inscricao: input.inscricao,
-      lat: input.lat ?? -23.55,
-      lng: input.lng ?? -46.633,
-      createdAt: t,
-      updatedAt: t,
-    };
-    mutate((db) => {
-      db.demandas.push(d);
-    });
-    res.status(201).json(d);
-  });
-
-  router.post('/demandas/:id/gerar-os', (req, res) => {
-    const { fiscalId, fiscalNome } = req.body as { fiscalId: string; fiscalNome: string };
-    const db = loadDb();
-    const demanda = db.demandas.find((x) => x.id === req.params.id);
-    if (!demanda) {
-      res.status(404).json({ error: 'Demanda não encontrada' });
-      return;
-    }
-    const count = db.ordens.filter((o) => o.fiscalId === fiscalId).length;
-    const t = now();
-    const os: OrdemServico = {
-      id: uid('OS'),
-      demandaId: demanda.id,
-      fiscalId,
-      fiscalNome,
-      inscricao: demanda.inscricao ?? '—',
-      endereco: demanda.endereco ?? demanda.bairro,
-      bairro: demanda.bairro,
-      status: 'atribuida',
-      lat: demanda.lat,
-      lng: demanda.lng,
-      rotaOrdem: count + 1,
-      createdAt: t,
-      updatedAt: t,
-    };
-    mutate((d) => {
-      d.ordens.push(os);
-      const dem = d.demandas.find((x) => x.id === demanda.id);
-      if (dem) {
-        dem.status = 'os_gerada';
-        dem.updatedAt = t;
+  router.post(
+    '/auth/login',
+    asyncHandler(async (req, res) => {
+      const { email, senha } = req.body as { email?: string; senha?: string };
+      const repo = getRepo();
+      const user = await repo.login(String(email || '').trim().toLowerCase(), String(senha || ''));
+      if (!user) {
+        res.status(401).json({ error: 'Credenciais inválidas' });
+        return;
       }
-    });
-    res.status(201).json(os);
-  });
+      const token = signToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        nome: user.nome,
+      });
+      res.json({
+        token,
+        user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
+      });
+    }),
+  );
 
-  router.get('/ordens', (req, res) => {
-    const db = loadDb();
-    const fiscalId = req.query.fiscalId as string | undefined;
-    let list = db.ordens;
-    if (fiscalId) list = list.filter((o) => o.fiscalId === fiscalId).sort((a, b) => a.rotaOrdem - b.rotaOrdem);
-    else list = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    res.json(list);
-  });
+  router.use(authRequired);
 
-  router.patch('/ordens/:id', (req, res) => {
-    const { status } = req.body as { status: OsStatus };
-    const t = now();
-    mutate((db) => {
-      const o = db.ordens.find((x) => x.id === req.params.id);
-      if (o) {
-        o.status = status;
-        o.updatedAt = t;
+  router.get(
+    '/bootstrap',
+    asyncHandler(async (_req, res) => {
+      res.json(await getRepo().bootstrap());
+    }),
+  );
+
+  router.post(
+    '/sync/replace',
+    asyncHandler(async (req, res) => {
+      const body = req.body as {
+        demandas?: Demanda[];
+        ordens?: OrdemServico[];
+        vistorias?: Vistoria[];
+      };
+      await getRepo().syncReplace(body);
+      res.json({ ok: true });
+    }),
+  );
+
+  router.get(
+    '/demandas',
+    asyncHandler(async (_req, res) => {
+      res.json(await getRepo().listDemandas());
+    }),
+  );
+
+  router.post(
+    '/demandas',
+    asyncHandler(async (req, res) => {
+      const input = req.body as {
+        tipo: string;
+        bairro: string;
+        prioridade: Prioridade;
+        prazo: string;
+        endereco?: string;
+        inscricao?: string;
+        lat?: number;
+        lng?: number;
+      };
+      const d = await getRepo().createDemanda({
+        ...input,
+        lat: input.lat ?? -23.55,
+        lng: input.lng ?? -46.633,
+      });
+      res.status(201).json(d);
+    }),
+  );
+
+  router.post(
+    '/demandas/:id/gerar-os',
+    asyncHandler(async (req, res) => {
+      const { fiscalId, fiscalNome } = req.body as { fiscalId: string; fiscalNome: string };
+      const os = await getRepo().gerarOs(req.params.id, fiscalId, fiscalNome);
+      if (!os) {
+        res.status(404).json({ error: 'Demanda não encontrada' });
+        return;
       }
-    });
-    res.json(loadDb().ordens.find((x) => x.id === req.params.id));
-  });
+      res.status(201).json(os);
+    }),
+  );
 
-  router.post('/ordens/:id/homologar', (req, res) => {
-    const { aprovado } = req.body as { aprovado: boolean };
-    const t = now();
-    mutate((db) => {
-      const o = db.ordens.find((x) => x.id === req.params.id);
-      if (!o) return;
-      o.status = aprovado ? 'homologada' : 'em_vistoria';
-      o.updatedAt = t;
-      if (aprovado) {
-        const d = db.demandas.find((x) => x.id === o.demandaId);
-        if (d) {
-          d.status = 'concluida';
-          d.updatedAt = t;
-        }
+  router.get(
+    '/ordens',
+    asyncHandler(async (req, res) => {
+      const fiscalId = req.query.fiscalId as string | undefined;
+      res.json(await getRepo().listOrdens(fiscalId));
+    }),
+  );
+
+  router.patch(
+    '/ordens/:id',
+    asyncHandler(async (req, res) => {
+      const { status } = req.body as { status: OsStatus };
+      res.json(await getRepo().patchOrdem(req.params.id, status));
+    }),
+  );
+
+  router.post(
+    '/ordens/:id/homologar',
+    asyncHandler(async (req, res) => {
+      const { aprovado } = req.body as { aprovado: boolean };
+      await getRepo().homologar(req.params.id, aprovado);
+      res.json({ ok: true });
+    }),
+  );
+
+  router.get(
+    '/vistorias',
+    asyncHandler(async (req, res) => {
+      const osId = req.query.osId as string;
+      res.json(await getRepo().getVistoriaByOs(osId));
+    }),
+  );
+
+  router.post(
+    '/vistorias',
+    asyncHandler(async (req, res) => {
+      const { osId } = req.body as { osId: string };
+      res.status(201).json(await getRepo().createVistoria(osId));
+    }),
+  );
+
+  router.patch(
+    '/vistorias/:id',
+    asyncHandler(async (req, res) => {
+      res.json(await getRepo().patchVistoria(req.params.id, req.body));
+    }),
+  );
+
+  router.get(
+    '/vistorias/:id/fotos',
+    asyncHandler(async (req, res) => {
+      res.json(await getRepo().listFotos(req.params.id));
+    }),
+  );
+
+  router.post(
+    '/vistorias/:id/fotos',
+    upload.single('file'),
+    asyncHandler(async (req, res) => {
+      if (!req.file) {
+        res.status(400).json({ error: 'Arquivo obrigatório (campo file)' });
+        return;
       }
-    });
-    res.json({ ok: true });
-  });
+      const vistoriaId = req.params.id;
+      const fotoId = uid('F');
+      const ext = req.file.mimetype.includes('png') ? 'png' : 'jpg';
+      const filename = `${fotoId}.${ext}`;
+      const dir = join(config.uploadsDir, vistoriaId);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, filename), req.file.buffer);
+      const foto = await getRepo().addFoto({
+        id: fotoId,
+        vistoriaId,
+        filename,
+        mime: req.file.mimetype,
+        sizeBytes: req.file.size,
+        createdAt: new Date().toISOString(),
+      });
+      res.status(201).json(foto);
+    }),
+  );
 
-  router.get('/vistorias', (req, res) => {
-    const osId = req.query.osId as string;
-    const db = loadDb();
-    res.json(db.vistorias.find((v) => v.osId === osId) ?? null);
-  });
+  router.get(
+    '/fotos/:id/file',
+    asyncHandler(async (req, res) => {
+      const foto = await getRepo().getFoto(req.params.id);
+      if (!foto) {
+        res.status(404).json({ error: 'Foto não encontrada' });
+        return;
+      }
+      const filePath = resolve(config.uploadsDir, foto.vistoriaId, foto.filename);
+      if (!existsSync(filePath)) {
+        res.status(404).json({ error: 'Arquivo ausente' });
+        return;
+      }
+      res.setHeader('Content-Type', foto.mime);
+      res.sendFile(filePath);
+    }),
+  );
 
-  router.post('/vistorias', (req, res) => {
-    const { osId } = req.body as { osId: string };
-    const db = loadDb();
-    const existing = db.vistorias.find((v) => v.osId === osId);
-    if (existing) {
-      res.json(existing);
-      return;
-    }
-    const t = now();
-    const v: Vistoria = {
-      id: uid('V'),
-      osId,
-      checklist: {},
-      divergencia: false,
-      syncStatus: 'local',
-      createdAt: t,
-      updatedAt: t,
-    };
-    mutate((d) => {
-      d.vistorias.push(v);
-    });
-    res.status(201).json(v);
-  });
+  router.get(
+    '/fiscais',
+    asyncHandler(async (_req, res) => {
+      res.json(await getRepo().listFiscais());
+    }),
+  );
 
-  router.patch('/vistorias/:id', (req, res) => {
-    const t = now();
-    mutate((db) => {
-      const v = db.vistorias.find((x) => x.id === req.params.id);
-      if (v) Object.assign(v, req.body, { updatedAt: t });
-    });
-    res.json(loadDb().vistorias.find((x) => x.id === req.params.id));
-  });
-
-  router.get('/fiscais', (_req, res) => {
-    res.json(loadDb().users.filter((u) => u.role === 'fiscal').map(({ senha: _, ...u }) => u));
-  });
-
-  router.get('/kpis', (_req, res) => {
-    const db = loadDb();
-    const hoje = now().slice(0, 10);
-    const osHoje = db.ordens.filter((o) => o.createdAt.startsWith(hoje)).length;
-    const concluidas = db.ordens.filter((o) =>
-      ['concluida', 'homologacao', 'homologada', 'pendente_sync'].includes(o.status),
-    ).length;
-    const homolog = db.ordens.filter((o) => o.status === 'homologacao').length;
-    const divergencias = db.vistorias.filter((v) => v.divergencia).length;
-    res.json({
-      osHoje: osHoje || db.ordens.length,
-      concluidas,
-      homolog,
-      divergencias,
-      fiscais: db.users.filter((u) => u.role === 'fiscal'),
-    });
-  });
+  router.get(
+    '/kpis',
+    asyncHandler(async (_req, res) => {
+      res.json(await getRepo().getKpis());
+    }),
+  );
 
   return router;
 }

@@ -1,0 +1,249 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { DbShape, Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
+
+const __dir = dirname(fileURLToPath(import.meta.url));
+const dbPath = join(__dir, '..', 'data', 'fisaval.json');
+
+const now = () => new Date().toISOString();
+export const uid = (p: string) => `${p}-${Date.now().toString(36)}`;
+
+function empty(): DbShape {
+  return { users: [], demandas: [], ordens: [], vistorias: [], fotos: [] };
+}
+
+export function loadDb(): DbShape {
+  if (!existsSync(dbPath)) return empty();
+  const raw = JSON.parse(readFileSync(dbPath, 'utf8')) as DbShape;
+  if (!raw.fotos) raw.fotos = [];
+  return raw;
+}
+
+export function saveDb(db: DbShape) {
+  mkdirSync(join(__dir, '..', 'data'), { recursive: true });
+  writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
+}
+
+export function seedJson(): DbShape {
+  const db = loadDb();
+  if (db.users.length > 0) return db;
+  const t = now();
+  db.users = [
+    { id: 'u-gestor', email: 'gestor@demo', nome: 'Gestor Finanças', role: 'gestor', senha: 'demo123' },
+    { id: 'u-fiscal1', email: 'fiscal@demo', nome: 'Ana Silva', role: 'fiscal', senha: 'demo123' },
+    { id: 'u-fiscal2', email: 'carlos@demo', nome: 'Carlos Mendes', role: 'fiscal', senha: 'demo123' },
+    { id: 'u-admin', email: 'admin@demo', nome: 'Administrador', role: 'admin', senha: 'demo123' },
+  ];
+  db.demandas = [
+    {
+      id: 'D-1042',
+      tipo: 'Revisão cadastral',
+      bairro: 'Centro',
+      prioridade: 'alta',
+      prazo: '2026-06-05',
+      status: 'os_gerada',
+      inscricao: '12.034.0056.0001',
+      endereco: 'R. das Flores, 123',
+      lat: -23.5505,
+      lng: -46.6333,
+      createdAt: t,
+      updatedAt: t,
+    },
+    {
+      id: 'D-1043',
+      tipo: 'Denúncia',
+      bairro: 'Vila Nova',
+      prioridade: 'alta',
+      prazo: '2026-06-04',
+      status: 'aberta',
+      inscricao: '12.034.0089.0012',
+      endereco: 'Av. Brasil, 890',
+      lat: -23.552,
+      lng: -46.631,
+      createdAt: t,
+      updatedAt: t,
+    },
+  ];
+  db.ordens = [
+    {
+      id: 'OS-8821',
+      demandaId: 'D-1042',
+      fiscalId: 'u-fiscal1',
+      fiscalNome: 'Ana Silva',
+      inscricao: '12.034.0056.0001',
+      endereco: 'R. das Flores, 123',
+      bairro: 'Centro',
+      status: 'atribuida',
+      lat: -23.5505,
+      lng: -46.6333,
+      rotaOrdem: 1,
+      createdAt: t,
+      updatedAt: t,
+    },
+  ];
+  db.vistorias = [];
+  db.fotos = [];
+  saveDb(db);
+  return db;
+}
+
+export const jsonRepo = {
+  mode: 'json' as const,
+  async ensureSeed() {
+    return seedJson();
+  },
+  async login(email: string, senha: string) {
+    const db = loadDb();
+    return db.users.find((u) => u.email === email && u.senha === senha) ?? null;
+  },
+  async bootstrap() {
+    const db = loadDb();
+    return {
+      users: db.users.map(({ senha: _, ...u }) => u),
+      demandas: db.demandas,
+      ordens: db.ordens,
+      vistorias: db.vistorias,
+      fotos: db.fotos,
+    };
+  },
+  async syncReplace(partial: { demandas?: Demanda[]; ordens?: OrdemServico[]; vistorias?: Vistoria[] }) {
+    mutate((db) => {
+      if (partial.demandas) db.demandas = partial.demandas;
+      if (partial.ordens) db.ordens = partial.ordens;
+      if (partial.vistorias) db.vistorias = partial.vistorias;
+    });
+  },
+  async listDemandas() {
+    return loadDb().demandas;
+  },
+  async createDemanda(input: Omit<Demanda, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
+    const t = now();
+    const d: Demanda = { ...input, id: uid('D'), status: 'aberta', createdAt: t, updatedAt: t };
+    mutate((db) => db.demandas.push(d));
+    return d;
+  },
+  async gerarOs(demandaId: string, fiscalId: string, fiscalNome: string) {
+    const db = loadDb();
+    const demanda = db.demandas.find((x) => x.id === demandaId);
+    if (!demanda) return null;
+    const t = now();
+    const os: OrdemServico = {
+      id: uid('OS'),
+      demandaId: demanda.id,
+      fiscalId,
+      fiscalNome,
+      inscricao: demanda.inscricao ?? '—',
+      endereco: demanda.endereco ?? demanda.bairro,
+      bairro: demanda.bairro,
+      status: 'atribuida',
+      lat: demanda.lat,
+      lng: demanda.lng,
+      rotaOrdem: db.ordens.filter((o) => o.fiscalId === fiscalId).length + 1,
+      createdAt: t,
+      updatedAt: t,
+    };
+    mutate((d) => {
+      d.ordens.push(os);
+      const dem = d.demandas.find((x) => x.id === demandaId);
+      if (dem) {
+        dem.status = 'os_gerada';
+        dem.updatedAt = t;
+      }
+    });
+    return os;
+  },
+  async listOrdens(fiscalId?: string) {
+    const db = loadDb();
+    let list = db.ordens;
+    if (fiscalId) list = list.filter((o) => o.fiscalId === fiscalId).sort((a, b) => a.rotaOrdem - b.rotaOrdem);
+    else list = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return list;
+  },
+  async patchOrdem(id: string, status: OsStatus) {
+    const t = now();
+    mutate((db) => {
+      const o = db.ordens.find((x) => x.id === id);
+      if (o) {
+        o.status = status;
+        o.updatedAt = t;
+      }
+    });
+    return loadDb().ordens.find((x) => x.id === id) ?? null;
+  },
+  async homologar(id: string, aprovado: boolean) {
+    const t = now();
+    mutate((db) => {
+      const o = db.ordens.find((x) => x.id === id);
+      if (!o) return;
+      o.status = aprovado ? 'homologada' : 'em_vistoria';
+      o.updatedAt = t;
+      if (aprovado) {
+        const d = db.demandas.find((x) => x.id === o.demandaId);
+        if (d) {
+          d.status = 'concluida';
+          d.updatedAt = t;
+        }
+      }
+    });
+  },
+  async getVistoriaByOs(osId: string) {
+    return loadDb().vistorias.find((v) => v.osId === osId) ?? null;
+  },
+  async createVistoria(osId: string) {
+    const existing = loadDb().vistorias.find((v) => v.osId === osId);
+    if (existing) return existing;
+    const t = now();
+    const v: Vistoria = {
+      id: uid('V'),
+      osId,
+      checklist: {},
+      divergencia: false,
+      syncStatus: 'local',
+      createdAt: t,
+      updatedAt: t,
+    };
+    mutate((db) => db.vistorias.push(v));
+    return v;
+  },
+  async patchVistoria(id: string, patch: Partial<Vistoria>) {
+    const t = now();
+    mutate((db) => {
+      const v = db.vistorias.find((x) => x.id === id);
+      if (v) Object.assign(v, patch, { updatedAt: t });
+    });
+    return loadDb().vistorias.find((x) => x.id === id) ?? null;
+  },
+  async addFoto(foto: VistoriaFoto) {
+    mutate((db) => db.fotos.push(foto));
+    return foto;
+  },
+  async listFotos(vistoriaId: string) {
+    return loadDb().fotos.filter((f) => f.vistoriaId === vistoriaId);
+  },
+  async getFoto(id: string) {
+    return loadDb().fotos.find((f) => f.id === id) ?? null;
+  },
+  async listFiscais() {
+    return loadDb().users.filter((u) => u.role === 'fiscal').map(({ senha: _, ...u }) => u);
+  },
+  async getKpis() {
+    const db = loadDb();
+    const hoje = now().slice(0, 10);
+    return {
+      osHoje: db.ordens.filter((o) => o.createdAt.startsWith(hoje)).length || db.ordens.length,
+      concluidas: db.ordens.filter((o) =>
+        ['concluida', 'homologacao', 'homologada', 'pendente_sync'].includes(o.status),
+      ).length,
+      homolog: db.ordens.filter((o) => o.status === 'homologacao').length,
+      divergencias: db.vistorias.filter((v) => v.divergencia).length,
+      fiscais: db.users.filter((u) => u.role === 'fiscal'),
+    };
+  },
+};
+
+function mutate(fn: (db: DbShape) => void) {
+  const db = loadDb();
+  fn(db);
+  saveDb(db);
+}

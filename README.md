@@ -23,7 +23,7 @@ npm install
 npm run dev:all
 ```
 
-Copie `app/.env.example` → `app/.env` (`VITE_API_URL=http://127.0.0.1:8790`). Detalhes: [docs/PRODUCAO.md](docs/PRODUCAO.md).
+Copie `app/.env.example` → `app/.env` (`VITE_API_URL=http://127.0.0.1:8790`). Detalhes: [docs/PRODUCAO.md](docs/PRODUCAO.md) · Fase 3 (PostGIS/JWT/fotos): [docs/FASE3.md](docs/FASE3.md)
 
 Publicar front: [docs/DEPLOY.md](docs/DEPLOY.md) — **https://rivascode-ops.github.io/FISAVAL/**
 

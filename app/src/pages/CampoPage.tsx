@@ -2,15 +2,20 @@ import { useCallback, useEffect, useState } from 'react';
 import type { OrdemServico, Vistoria } from '@/types';
 import { OsMap } from '@/components/OsMap';
 import { useAuthStore } from '@/store/authStore';
+import type { VistoriaFoto } from '@/types';
 import {
+  apiFotoBlobUrl,
   CHECKLIST_ITEMS,
   concluirVistoria,
   getOrCreateVistoria,
+  listFotos,
   listOrdensFiscal,
   saveVistoria,
   syncPendentes,
   updateOsStatus,
+  uploadFoto,
 } from '@/services/fisavalService';
+import { isApiMode } from '@/api/config';
 
 export function CampoPage() {
   const session = useAuthStore((s) => s.session)!;
@@ -19,6 +24,8 @@ export function CampoPage() {
   const [vistoria, setVistoria] = useState<Vistoria | null>(null);
   const [justificativa, setJustificativa] = useState('');
   const [msg, setMsg] = useState('');
+  const [fotos, setFotos] = useState<VistoriaFoto[]>([]);
+  const [fotoUrls, setFotoUrls] = useState<Record<string, string>>({});
 
   const reload = useCallback(async () => {
     const list = await listOrdensFiscal(session.userId);
@@ -36,8 +43,38 @@ export function CampoPage() {
       const v = await getOrCreateVistoria(selected.id);
       setVistoria(v);
       setJustificativa(v.justificativa ?? '');
+      const list = await listFotos(v.id);
+      setFotos(list);
+      if (isApiMode()) {
+        const urls: Record<string, string> = {};
+        for (const f of list) {
+          try {
+            urls[f.id] = await apiFotoBlobUrl(f.id);
+          } catch {
+            /* skip */
+          }
+        }
+        setFotoUrls(urls);
+      }
     })();
   }, [selected?.id]);
+
+  async function onFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !vistoria) return;
+    if (!isApiMode()) {
+      alert('Upload de fotos requer API (app/.env com VITE_API_URL).');
+      return;
+    }
+    const foto = await uploadFoto(vistoria.id, file);
+    if (foto) {
+      setFotos((prev) => [...prev, foto]);
+      const url = await apiFotoBlobUrl(foto.id);
+      setFotoUrls((prev) => ({ ...prev, [foto.id]: url }));
+      setMsg('Foto enviada.');
+    }
+    e.target.value = '';
+  }
 
   async function checkIn() {
     if (!selected || !vistoria) return;
@@ -134,6 +171,21 @@ export function CampoPage() {
               </label>
             ))}
           </div>
+          <label>Fotos da vistoria</label>
+          <input type="file" accept="image/*" capture="environment" onChange={(e) => void onFotoChange(e)} />
+          {fotos.length > 0 && (
+            <div className="foto-grid">
+              {fotos.map((f) => (
+                <div key={f.id} className="foto-thumb">
+                  {fotoUrls[f.id] ? (
+                    <img src={fotoUrls[f.id]} alt={f.filename} />
+                  ) : (
+                    <span>{f.filename}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           <label>Justificativa (interrupção)</label>
           <textarea rows={2} value={justificativa} onChange={(e) => setJustificativa(e.target.value)} />
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>

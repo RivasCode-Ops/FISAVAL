@@ -1,14 +1,20 @@
 import { db } from '@/db/database';
-import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria } from '@/types';
+import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from '@/types';
 import { getApiUrl } from './config';
+import { useAuthStore } from '@/store/authStore';
+
+function headers(json = true): HeadersInit {
+  const h: Record<string, string> = {};
+  if (json) h['Content-Type'] = 'application/json';
+  const token = useAuthStore.getState().token;
+  if (token) h.Authorization = `Bearer ${token}`;
+  return h;
+}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const base = getApiUrl();
   if (!base) throw new Error('API não configurada');
-  const res = await fetch(`${base}/api/fisaval${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
-  });
+  const res = await fetch(`${base}/api/fisaval${path}`, { ...init, headers: { ...headers(), ...init?.headers } });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(err.error ?? `HTTP ${res.status}`);
@@ -17,10 +23,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function apiLogin(email: string, senha: string) {
-  return api<{ user: { id: string; email: string; nome: string; role: User['role'] } }>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, senha }),
-  });
+  return api<{ token: string; user: { id: string; email: string; nome: string; role: User['role'] } }>(
+    '/auth/login',
+    { method: 'POST', body: JSON.stringify({ email, senha }), headers: headers() },
+  );
 }
 
 export async function apiBootstrap() {
@@ -29,6 +35,7 @@ export async function apiBootstrap() {
     demandas: Demanda[];
     ordens: OrdemServico[];
     vistorias: Vistoria[];
+    fotos: VistoriaFoto[];
   }>('/bootstrap');
 }
 
@@ -39,12 +46,7 @@ export async function hydrateDexieFromApi() {
     await db.demandas.clear();
     await db.ordens.clear();
     await db.vistorias.clear();
-    await db.users.bulkAdd(
-      data.users.map((u) => ({
-        ...u,
-        senha: '',
-      })),
-    );
+    await db.users.bulkAdd(data.users.map((u) => ({ ...u, senha: '' })));
     await db.demandas.bulkAdd(data.demandas);
     await db.ordens.bulkAdd(data.ordens);
     await db.vistorias.bulkAdd(data.vistorias);
@@ -61,6 +63,32 @@ export async function apiPushState() {
     method: 'POST',
     body: JSON.stringify({ demandas, ordens, vistorias }),
   });
+}
+
+export async function apiUploadFoto(vistoriaId: string, file: File): Promise<VistoriaFoto> {
+  const base = getApiUrl();
+  if (!base) throw new Error('API não configurada');
+  const fd = new FormData();
+  fd.append('file', file);
+  const token = useAuthStore.getState().token;
+  const res = await fetch(`${base}/api/fisaval/vistorias/${vistoriaId}/fotos`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  if (!res.ok) throw new Error('Falha no upload');
+  return res.json() as Promise<VistoriaFoto>;
+}
+
+export async function apiFotoBlobUrl(fotoId: string): Promise<string> {
+  const base = getApiUrl();
+  const token = useAuthStore.getState().token;
+  const res = await fetch(`${base}/api/fisaval/fotos/${fotoId}/file`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error('Foto indisponível');
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 export const apiClient = {
@@ -81,6 +109,7 @@ export const apiClient = {
   createVistoria: (osId: string) => api<Vistoria>('/vistorias', { method: 'POST', body: JSON.stringify({ osId }) }),
   patchVistoria: (id: string, body: object) =>
     api<Vistoria>(`/vistorias/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  listFotos: (vistoriaId: string) => api<VistoriaFoto[]>(`/vistorias/${vistoriaId}/fotos`),
   listFiscais: () => api<{ id: string; nome: string; email: string; role: string }[]>('/fiscais'),
   getKpis: () => api<{ osHoje: number; concluidas: number; homolog: number; divergencias: number; fiscais: User[] }>('/kpis'),
 };

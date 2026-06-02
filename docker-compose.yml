@@ -1,5 +1,6 @@
-# Fase 3 — subir quando for usar PostGIS de verdade
+# Fase 3 — PostGIS + API
 # Uso: docker compose up -d
+# Depois: copy api/.env.example → api/.env com DATABASE_URL abaixo
 
 services:
   db:
@@ -12,6 +13,11 @@ services:
       - '5432:5432'
     volumes:
       - fisaval_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fisaval']
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   fisaval_pg:

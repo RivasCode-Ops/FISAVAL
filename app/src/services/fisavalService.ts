@@ -1,7 +1,7 @@
-import { apiClient, apiPushState } from '@/api/client';
+import { apiClient, apiFotoBlobUrl, apiPushState, apiUploadFoto } from '@/api/client';
 import { isApiMode } from '@/api/config';
 import { db } from '@/db/database';
-import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria } from '@/types';
+import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria, VistoriaFoto } from '@/types';
 
 const now = () => new Date().toISOString();
 const uid = (p: string) => `${p}-${Date.now().toString(36)}`;
@@ -248,3 +248,23 @@ export async function getKpis() {
 export async function listFiscais() {
   return db.users.where('role').equals('fiscal').toArray();
 }
+
+export async function listFotos(vistoriaId: string): Promise<VistoriaFoto[]> {
+  if (isApiMode() && navigator.onLine) {
+    try {
+      return await apiClient.listFotos(vistoriaId);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+export async function uploadFoto(vistoriaId: string, file: File): Promise<VistoriaFoto | null> {
+  if (isApiMode() && navigator.onLine) {
+    return apiUploadFoto(vistoriaId, file);
+  }
+  return null;
+}
+
+export { apiFotoBlobUrl };

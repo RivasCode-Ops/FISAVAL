@@ -7,7 +7,8 @@ import { ensureSeed } from '@/db/seed';
 import '@/styles/app.css';
 
 async function bootstrap() {
-  if (isApiMode() && navigator.onLine) {
+  const { token } = await import('@/store/authStore').then((m) => m.useAuthStore.getState());
+  if (isApiMode() && navigator.onLine && token) {
     try {
       await hydrateDexieFromApi();
       return;

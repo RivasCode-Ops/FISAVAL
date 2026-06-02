@@ -1,9 +1,6 @@
 export type UserRole = 'fiscal' | 'gestor' | 'admin';
-
 export type Prioridade = 'alta' | 'media' | 'baixa';
-
 export type DemandaStatus = 'aberta' | 'os_gerada' | 'concluida';
-
 export type OsStatus =
   | 'atribuida'
   | 'em_campo'
@@ -69,13 +66,6 @@ export interface Vistoria {
   updatedAt: string;
 }
 
-export interface Session {
-  userId: string;
-  email: string;
-  nome: string;
-  role: UserRole;
-}
-
 export interface VistoriaFoto {
   id: string;
   vistoriaId: string;
@@ -83,4 +73,12 @@ export interface VistoriaFoto {
   mime: string;
   sizeBytes: number;
   createdAt: string;
+}
+
+export interface DbShape {
+  users: User[];
+  demandas: Demanda[];
+  ordens: OrdemServico[];
+  vistorias: Vistoria[];
+  fotos: VistoriaFoto[];
 }

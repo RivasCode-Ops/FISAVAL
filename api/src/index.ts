@@ -1,23 +1,32 @@
 import cors from 'cors';
 import express from 'express';
 import { createRoutes } from './routes.js';
-import { ensureSeed } from './store.js';
-
-ensureSeed();
+import { config, usePostgres } from './config.js';
+import { ensureStorage } from './repo.js';
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '4mb' }));
+app.use(express.json({ limit: '8mb' }));
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, app: 'fisaval-api', version: '0.2' });
+  res.json({
+    ok: true,
+    app: 'fisaval-api',
+    version: '0.3',
+    storage: usePostgres() ? 'postgres+postgis' : 'json',
+  });
 });
 
 app.use('/api/fisaval', createRoutes());
 
-const port = Number(process.env.PORT) || 8790;
-app.listen(port, () => {
-  console.log(`FISAVAL API http://127.0.0.1:${port}`);
-  console.log(`  GET  /api/fisaval/bootstrap`);
-  console.log(`  POST /api/fisaval/auth/login`);
-});
+async function main() {
+  await ensureStorage();
+  app.listen(config.port, () => {
+    console.log(`FISAVAL API http://127.0.0.1:${config.port}`);
+    console.log(`  Storage: ${usePostgres() ? 'PostgreSQL/PostGIS' : 'JSON (api/data/fisaval.json)'}`);
+    console.log(`  POST /api/fisaval/auth/login → JWT`);
+    console.log(`  POST /api/fisaval/vistorias/:id/fotos`);
+  });
+}
+
+void main();
