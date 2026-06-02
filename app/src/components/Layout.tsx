@@ -15,13 +15,17 @@ export function Layout() {
   const { health, checking, check } = useApiHealth(60_000);
   const apiMode = isApiMode();
   const [municipio, setMunicipio] = useState('');
+  const [tenantId, setTenantId] = useState('');
 
   useEffect(() => {
     const base = getApiUrl();
     if (base) {
       void fetch(`${base}/api/fisaval/config`)
         .then((r) => r.json())
-        .then((c: { municipio?: string }) => setMunicipio(c.municipio ?? ''))
+        .then((c: { municipio?: string; tenantId?: string }) => {
+          setMunicipio(c.municipio ?? '');
+          setTenantId(c.tenantId ?? '');
+        })
         .catch(() => {});
     }
   }, []);
@@ -39,7 +43,10 @@ export function Layout() {
         <div>
           <h1>FISAVAL</h1>
           {municipio && (
-            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)' }}>{municipio}</p>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)' }}>
+              {municipio}
+              {tenantId ? ` · ${tenantId}` : ''}
+            </p>
           )}
           <span className="offline-pill" data-on={online ? 'true' : 'false'}>
             {online ? '● Online' : '○ Offline (dados locais)'}

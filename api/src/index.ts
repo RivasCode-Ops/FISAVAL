@@ -18,11 +18,12 @@ app.get('/health', (_req, res) => {
     version: '0.4',
     storage: usePostgres() ? 'postgres+postgis' : 'json',
     municipio: config.municipioNome,
+    tenantId: config.tenantId,
   });
 });
 
 app.get('/api/fisaval/config', (_req, res) => {
-  res.json({ municipio: config.municipioNome, version: '0.4' });
+  res.json({ municipio: config.municipioNome, tenantId: config.tenantId, version: '0.4' });
 });
 
 app.use('/api/fisaval', createRoutes());

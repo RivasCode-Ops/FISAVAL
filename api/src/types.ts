@@ -22,6 +22,7 @@ export interface User {
 
 export interface Demanda {
   id: string;
+  tenantId?: string;
   tipo: string;
   bairro: string;
   prioridade: Prioridade;
@@ -61,6 +62,8 @@ export interface Vistoria {
   checkInLng?: number;
   checkInAt?: string;
   concluidaAt?: string;
+  assinaturaAt?: string;
+  assinaturaNome?: string;
   syncStatus: 'local' | 'synced';
   createdAt: string;
   updatedAt: string;

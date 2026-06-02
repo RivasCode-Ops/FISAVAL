@@ -119,7 +119,14 @@ export const jsonRepo = {
   },
   async createDemanda(input: Omit<Demanda, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
     const t = now();
-    const d: Demanda = { ...input, id: uid('D'), status: 'aberta', createdAt: t, updatedAt: t };
+    const d: Demanda = {
+      ...input,
+      tenantId: input.tenantId ?? config.tenantId,
+      id: uid('D'),
+      status: 'aberta',
+      createdAt: t,
+      updatedAt: t,
+    };
     mutate((db) => db.demandas.push(d));
     return d;
   },
@@ -130,6 +137,7 @@ export const jsonRepo = {
       for (const r of rows) {
         const d: Demanda = {
           id: uid('D'),
+          tenantId: config.tenantId,
           tipo: r.tipo,
           bairro: r.bairro,
           prioridade: r.prioridade,
@@ -249,6 +257,19 @@ export const jsonRepo = {
   },
   async getFoto(id: string) {
     return loadDb().fotos.find((f) => f.id === id) ?? null;
+  },
+  assinaturaPath(vistoriaId: string) {
+    return join(config.uploadsDir, vistoriaId, 'assinatura.png');
+  },
+  hasAssinatura(vistoriaId: string) {
+    return existsSync(this.assinaturaPath(vistoriaId));
+  },
+  async saveAssinatura(vistoriaId: string, fiscalNome: string, buffer: Buffer) {
+    const t = now();
+    const p = this.assinaturaPath(vistoriaId);
+    mkdirSync(join(config.uploadsDir, vistoriaId), { recursive: true });
+    writeFileSync(p, buffer);
+    return this.patchVistoria(vistoriaId, { assinaturaAt: t, assinaturaNome: fiscalNome });
   },
   async listFiscais() {
     return loadDb().users.filter((u) => u.role === 'fiscal').map(({ senha: _, ...u }) => u);

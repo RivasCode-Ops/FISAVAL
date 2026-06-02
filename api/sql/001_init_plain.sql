@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS vistorias (
   check_in_lng DOUBLE PRECISION,
   check_in_at TIMESTAMPTZ,
   concluida_at TIMESTAMPTZ,
+  assinatura_at TIMESTAMPTZ,
+  assinatura_nome TEXT,
   sync_status TEXT NOT NULL DEFAULT 'local',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

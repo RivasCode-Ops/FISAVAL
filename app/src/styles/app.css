@@ -133,6 +133,25 @@ tr.row-highlight td { background: rgba(59, 130, 246, 0.15); }
   gap: 0.5rem;
 }
 
+.assinatura-pad { margin: 0.75rem 0; }
+.assinatura-canvas {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  touch-action: none;
+  cursor: crosshair;
+  background: #fff;
+}
+.assinatura-preview {
+  max-width: 200px;
+  max-height: 80px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
 @media print {
   .topbar,
   .export-bar,

@@ -116,7 +116,7 @@ export function createRoutes(): Router {
       logAudit(auditUser(getAuth(req)!), 'demanda.criar', {
         entity: 'demanda',
         entityId: d.id,
-        detail: d.bairro,
+        detail: `${config.tenantId} · ${d.bairro}`,
       });
       res.status(201).json(d);
     }),
@@ -223,6 +223,56 @@ export function createRoutes(): Router {
         createdAt: new Date().toISOString(),
       });
       res.status(201).json(foto);
+    }),
+  );
+
+  router.post(
+    '/vistorias/:id/assinatura',
+    requireRoles('fiscal'),
+    upload.single('file'),
+    asyncHandler(async (req, res) => {
+      if (!req.file) {
+        res.status(400).json({ error: 'Arquivo obrigatório (campo file)' });
+        return;
+      }
+      const auth = getAuth(req)!;
+      const repo = getRepo();
+      if (!('saveAssinatura' in repo)) {
+        res.status(501).json({ error: 'Assinatura não suportada' });
+        return;
+      }
+      const vistoriaId = req.params.id;
+      const vList = (await repo.bootstrap()).vistorias;
+      if (!vList.find((v) => v.id === vistoriaId)) {
+        res.status(404).json({ error: 'Vistoria não encontrada' });
+        return;
+      }
+      await (
+        repo as { saveAssinatura: (id: string, nome: string, b: Buffer) => Promise<Vistoria | null> }
+      ).saveAssinatura(vistoriaId, auth.nome, req.file.buffer);
+      logAudit(auditUser(auth), 'vistoria.assinatura', {
+        entity: 'vistoria',
+        entityId: vistoriaId,
+        detail: `tenant:${config.tenantId}`,
+      });
+      res.json({ ok: true });
+    }),
+  );
+
+  router.get(
+    '/vistorias/:id/assinatura/file',
+    asyncHandler(async (req, res) => {
+      const repo = getRepo();
+      const path =
+        'assinaturaPath' in repo
+          ? (repo as { assinaturaPath: (id: string) => string }).assinaturaPath(req.params.id)
+          : join(config.uploadsDir, req.params.id, 'assinatura.png');
+      if (!existsSync(path)) {
+        res.status(404).json({ error: 'Assinatura não encontrada' });
+        return;
+      }
+      res.setHeader('Content-Type', 'image/png');
+      res.sendFile(resolve(path));
     }),
   );
 

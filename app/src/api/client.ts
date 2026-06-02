@@ -83,6 +83,31 @@ export async function apiUploadFoto(vistoriaId: string, file: File): Promise<Vis
   return res.json() as Promise<VistoriaFoto>;
 }
 
+export async function apiUploadAssinatura(vistoriaId: string, blob: Blob): Promise<void> {
+  const base = getApiUrl();
+  if (!base) throw new Error('API não configurada');
+  const fd = new FormData();
+  fd.append('file', blob, 'assinatura.png');
+  const token = useAuthStore.getState().token;
+  const res = await fetch(`${base}/api/fisaval/vistorias/${vistoriaId}/assinatura`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  if (!res.ok) throw new Error('Falha no upload da assinatura');
+}
+
+export async function apiAssinaturaBlobUrl(vistoriaId: string): Promise<string | null> {
+  const base = getApiUrl();
+  const token = useAuthStore.getState().token;
+  const res = await fetch(`${base}/api/fisaval/vistorias/${vistoriaId}/assinatura/file`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export async function apiFotoBlobUrl(fotoId: string): Promise<string> {
   const base = getApiUrl();
   const token = useAuthStore.getState().token;

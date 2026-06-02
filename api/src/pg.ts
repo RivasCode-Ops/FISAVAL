@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -140,6 +140,8 @@ function rowVistoria(r: Record<string, unknown>): Vistoria {
     checkInLng: r.check_in_lng != null ? Number(r.check_in_lng) : undefined,
     checkInAt: r.check_in_at ? new Date(r.check_in_at as string).toISOString() : undefined,
     concluidaAt: r.concluida_at ? new Date(r.concluida_at as string).toISOString() : undefined,
+    assinaturaAt: r.assinatura_at ? new Date(r.assinatura_at as string).toISOString() : undefined,
+    assinaturaNome: (r.assinatura_nome as string) ?? undefined,
     syncStatus: r.sync_status as Vistoria['syncStatus'],
     createdAt: new Date(r.created_at as string).toISOString(),
     updatedAt: new Date(r.updated_at as string).toISOString(),
@@ -445,7 +447,8 @@ export const pgRepo = {
     const merged = { ...rowVistoria(cur), ...patch, updatedAt: t };
     await getPool().query(
       `UPDATE vistorias SET checklist = $2, divergencia = $3, justificativa = $4,
-       check_in_lat = $5, check_in_lng = $6, check_in_at = $7, concluida_at = $8, sync_status = $9, updated_at = $10
+       check_in_lat = $5, check_in_lng = $6, check_in_at = $7, concluida_at = $8, sync_status = $9,
+       assinatura_at = $10, assinatura_nome = $11, updated_at = $12
        WHERE id = $1`,
       [
         id,
@@ -457,10 +460,26 @@ export const pgRepo = {
         merged.checkInAt ?? null,
         merged.concluidaAt ?? null,
         merged.syncStatus,
+        merged.assinaturaAt ?? null,
+        merged.assinaturaNome ?? null,
         t,
       ],
     );
     return merged;
+  },
+  assinaturaPath(vistoriaId: string) {
+    return join(config.uploadsDir, vistoriaId, 'assinatura.png');
+  },
+  hasAssinatura(vistoriaId: string) {
+    return existsSync(this.assinaturaPath(vistoriaId));
+  },
+  async saveAssinatura(vistoriaId: string, fiscalNome: string, buffer: Buffer) {
+    mkdirSync(join(config.uploadsDir, vistoriaId), { recursive: true });
+    writeFileSync(this.assinaturaPath(vistoriaId), buffer);
+    return this.patchVistoria(vistoriaId, {
+      assinaturaAt: now(),
+      assinaturaNome: fiscalNome,
+    });
   },
   async addFoto(foto: VistoriaFoto) {
     await getPool().query(

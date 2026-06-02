@@ -13,6 +13,7 @@ import {
 import {
   CHECKLIST_ITEMS,
   getKpis,
+  getAssinaturaDisplayUrl,
   getVistoriaForOs,
   getVistoriaMapByOs,
   homologar,
@@ -43,6 +44,7 @@ export function PainelPage() {
   const [filtroStatus, setFiltroStatus] = useState('all');
   const [filtroFiscal, setFiltroFiscal] = useState('all');
   const [destaqueId, setDestaqueId] = useState<string | null>(null);
+  const [assinaturaUrls, setAssinaturaUrls] = useState<Record<string, string>>({});
   const online = useOnline();
 
   const reload = useCallback(async () => {
@@ -64,6 +66,15 @@ export function PainelPage() {
       if (v) vs[o.id] = v;
     }
     setVistorias(vs);
+    const urls: Record<string, string> = {};
+    for (const o of queue) {
+      const v = vs[o.id];
+      if (v) {
+        const url = await getAssinaturaDisplayUrl(v.id);
+        if (url) urls[o.id] = url;
+      }
+    }
+    setAssinaturaUrls(urls);
   }, []);
 
   useEffect(() => {
@@ -263,10 +274,19 @@ export function PainelPage() {
                         <span className="badge b-pri-baixa">Sem divergência</span>
                       )}
                       {checks.length > 0 && ` · ${checks.length} itens OK`}
-                      {v.concluidaAt && ` · ${new Date(v.concluidaAt).toLocaleString('pt-BR')}`}
-                    </p>
-                  )}
-                  <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                    {v.concluidaAt && ` · ${new Date(v.concluidaAt).toLocaleString('pt-BR')}`}
+                    {v.assinaturaNome && ` · Ass.: ${v.assinaturaNome}`}
+                  </p>
+                )}
+                {assinaturaUrls[o.id] && (
+                  <img
+                    src={assinaturaUrls[o.id]}
+                    alt="Assinatura fiscal"
+                    className="assinatura-preview"
+                    style={{ marginTop: '0.35rem' }}
+                  />
+                )}
+                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
                     <button
                       type="button"
                       className="btn btn-sm btn-ok"

@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Demanda, FotoLocal, OrdemServico, User, Vistoria } from '@/types';
+import type { AssinaturaLocal, Demanda, FotoLocal, OrdemServico, User, Vistoria } from '@/types';
 
 export class FisavalDB extends Dexie {
   users!: Table<User, string>;
@@ -7,6 +7,7 @@ export class FisavalDB extends Dexie {
   ordens!: Table<OrdemServico, string>;
   vistorias!: Table<Vistoria, string>;
   fotos!: Table<FotoLocal, string>;
+  assinaturas!: Table<AssinaturaLocal, string>;
 
   constructor() {
     super('fisaval');
@@ -22,6 +23,14 @@ export class FisavalDB extends Dexie {
       ordens: 'id, demandaId, fiscalId, status, updatedAt',
       vistorias: 'id, osId, syncStatus, updatedAt',
       fotos: 'id, vistoriaId, syncStatus, createdAt',
+    });
+    this.version(3).stores({
+      users: 'id, email, role',
+      demandas: 'id, status, prioridade, bairro, updatedAt',
+      ordens: 'id, demandaId, fiscalId, status, updatedAt',
+      vistorias: 'id, osId, syncStatus, updatedAt',
+      fotos: 'id, vistoriaId, syncStatus, createdAt',
+      assinaturas: 'vistoriaId, syncStatus',
     });
   }
 }

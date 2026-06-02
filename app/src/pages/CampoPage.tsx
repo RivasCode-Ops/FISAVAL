@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OrdemServico, Vistoria } from '@/types';
+import { AssinaturaPad } from '@/components/AssinaturaPad';
 import { RotaMap } from '@/components/RotaMap';
 import { mapsDirUrl } from '@/lib/rota';
 import { useAuthStore } from '@/store/authStore';
@@ -7,8 +8,11 @@ import type { VistoriaFoto } from '@/types';
 import {
   CHECKLIST_ITEMS,
   concluirVistoria,
+  getAssinaturaDisplayUrl,
   getFotoDisplayUrl,
   getOrCreateVistoria,
+  hasAssinatura,
+  saveAssinatura,
   listFotos,
   listOrdensFiscal,
   otimizarRotaFiscal,
@@ -32,6 +36,7 @@ export function CampoPage() {
   const [fotos, setFotos] = useState<VistoriaFoto[]>([]);
   const [fotoUrls, setFotoUrls] = useState<Record<string, string>>({});
   const [pushMsg, setPushMsg] = useState('');
+  const [assinaturaUrl, setAssinaturaUrl] = useState<string | null>(null);
 
   useNovasOsAlert(ordens.length, true);
 
@@ -59,6 +64,7 @@ export function CampoPage() {
         if (url) urls[f.id] = url;
       }
       setFotoUrls(urls);
+      setAssinaturaUrl(await getAssinaturaDisplayUrl(v.id));
     })();
   }, [selected?.id]);
 
@@ -104,6 +110,10 @@ export function CampoPage() {
 
   async function concluir() {
     if (!selected || !vistoria) return;
+    if (!(await hasAssinatura(vistoria.id))) {
+      setMsg('Salve a assinatura antes de concluir a vistoria.');
+      return;
+    }
     await concluirVistoria(vistoria.id, selected.id);
     setMsg('Vistoria concluída — pendente de sincronização.');
     await reload();
@@ -140,6 +150,10 @@ export function CampoPage() {
     <div className="grid2">
       <div className="card">
         <h2>Minhas OS ({ordens.length})</h2>
+        <RotaMap ordens={rotaAtiva} selectedId={selected?.id} onSelect={setSelected} />
+        <button type="button" className="btn btn-outline btn-sm" style={{ marginBottom: '0.5rem' }} onClick={() => void otimizarRota()}>
+          Otimizar rota (GPS)
+        </button>
         <div className="os-list">
           {ordens.map((o) => (
             <div
@@ -228,6 +242,16 @@ export function CampoPage() {
               ))}
             </div>
           )}
+          <AssinaturaPad
+            nomeFiscal={session.nome}
+            initialUrl={assinaturaUrl}
+            onSave={(blob) => {
+              void saveAssinatura(vistoria!.id, session.nome, blob).then(async () => {
+                setAssinaturaUrl(await getAssinaturaDisplayUrl(vistoria!.id));
+                setMsg('Assinatura salva.');
+              });
+            }}
+          />
           <label>Justificativa (interrupção)</label>
           <textarea rows={2} value={justificativa} onChange={(e) => setJustificativa(e.target.value)} />
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>

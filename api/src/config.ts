@@ -16,6 +16,7 @@ export const config = {
   vapidPrivate: process.env.VAPID_PRIVATE_KEY || '',
   vapidSubject: process.env.VAPID_SUBJECT || 'mailto:gestor@fisaval.local',
   municipioNome: process.env.MUNICIPIO_NOME || 'Prefeitura Municipal (demo)',
+  tenantId: process.env.TENANT_ID || 'demo',
 };
 
 export const usePostgres = () => !!config.databaseUrl;

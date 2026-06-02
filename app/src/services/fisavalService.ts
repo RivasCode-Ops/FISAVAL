@@ -1,4 +1,19 @@
-import { apiClient, apiFotoBlobUrl, apiPushState, apiUploadFoto, hydrateDexieFromApi } from '@/api/client';
+import {
+  apiAssinaturaBlobUrl,
+  apiClient,
+  apiFotoBlobUrl,
+  apiPushState,
+  apiUploadAssinatura,
+  apiUploadFoto,
+  hydrateDexieFromApi,
+} from '@/api/client';
+import {
+  getAssinatura,
+  getAssinaturaObjectUrl,
+  listAssinaturasPendentes,
+  markAssinaturaSynced,
+  saveAssinaturaLocal,
+} from '@/db/assinaturas';
 import { isApiMode } from '@/api/config';
 import { db } from '@/db/database';
 import {
@@ -286,6 +301,8 @@ export async function syncPendentes(fiscalId: string): Promise<number> {
           checkInLng: v.checkInLng,
           checkInAt: v.checkInAt,
           concluidaAt: v.concluidaAt,
+          assinaturaAt: v.assinaturaAt,
+          assinaturaNome: v.assinaturaNome,
           syncStatus: 'synced',
         });
         await db.vistorias.put(synced);
@@ -304,8 +321,67 @@ export async function syncPendentes(fiscalId: string): Promise<number> {
   }
 
   const fotosN = await syncFotosPendentes();
+  const assN = await syncAssinaturasPendentes();
   await pushApi();
-  return n + fotosN;
+  return n + fotosN + assN;
+}
+
+export async function hasAssinatura(vistoriaId: string): Promise<boolean> {
+  const local = await getAssinatura(vistoriaId);
+  if (local) return true;
+  const v = await db.vistorias.get(vistoriaId);
+  if (v?.assinaturaAt) return true;
+  if (isApiMode() && navigator.onLine) {
+    const url = await apiAssinaturaBlobUrl(vistoriaId);
+    return !!url;
+  }
+  return false;
+}
+
+export async function getAssinaturaDisplayUrl(vistoriaId: string): Promise<string | null> {
+  const local = await getAssinaturaObjectUrl(vistoriaId);
+  if (local) return local;
+  if (isApiMode() && navigator.onLine) return apiAssinaturaBlobUrl(vistoriaId);
+  return null;
+}
+
+export async function saveAssinatura(vistoriaId: string, fiscalNome: string, blob: Blob) {
+  const t = now();
+  await saveAssinaturaLocal(vistoriaId, fiscalNome, blob);
+  await db.vistorias.update(vistoriaId, {
+    assinaturaAt: t,
+    assinaturaNome: fiscalNome,
+    updatedAt: t,
+  });
+  if (isApiMode() && navigator.onLine) {
+    try {
+      await apiUploadAssinatura(vistoriaId, blob);
+      await markAssinaturaSynced(vistoriaId);
+      const v = await apiClient.patchVistoria(vistoriaId, { assinaturaAt: t, assinaturaNome: fiscalNome });
+      await db.vistorias.put(v);
+    } catch {
+      /* sync depois */
+    }
+  }
+}
+
+export async function syncAssinaturasPendentes(): Promise<number> {
+  if (!isApiMode() || !navigator.onLine) return 0;
+  let n = 0;
+  for (const a of await listAssinaturasPendentes()) {
+    try {
+      await apiUploadAssinatura(a.vistoriaId, a.blob);
+      await markAssinaturaSynced(a.vistoriaId);
+      await apiClient.patchVistoria(a.vistoriaId, {
+        assinaturaAt: a.createdAt,
+        assinaturaNome: a.fiscalNome,
+      });
+      n++;
+    } catch {
+      /* retry */
+    }
+  }
+  return n;
 }
 
 export async function syncFotosPendentes(): Promise<number> {
