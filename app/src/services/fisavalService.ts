@@ -48,6 +48,13 @@ export async function listDemandas() {
   return db.demandas.orderBy('updatedAt').reverse().toArray();
 }
 
+export async function getVistoriaMapByOs(): Promise<Map<string, Vistoria>> {
+  const list = await db.vistorias.toArray();
+  const m = new Map<string, Vistoria>();
+  for (const v of list) m.set(v.osId, v);
+  return m;
+}
+
 export async function createDemanda(input: {
   tipo: string;
   bairro: string;

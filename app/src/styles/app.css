@@ -126,6 +126,22 @@ th { color: var(--muted); }
 .painel-marker--stop { background: #ef4444; }
 .painel-marker--nova { background: #8b9cb3; }
 tr.row-highlight td { background: rgba(59, 130, 246, 0.15); }
+
+.export-bar .export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media print {
+  .topbar,
+  .export-bar,
+  .map-filters,
+  .btn,
+  nav {
+    display: none !important;
+  }
+}
 .map-box--empty {
   display: flex;
   align-items: center;

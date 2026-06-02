@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Demanda, Prioridade } from '@/types';
+import { buildDemandasCsvRows, downloadCsv } from '@/lib/export';
 import { isApiMode } from '@/api/config';
 import {
   createDemanda,
@@ -122,6 +123,16 @@ export function DemandasPage() {
       <div className="card">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginBottom: '0.75rem' }}>
           <h2 style={{ margin: 0, flex: 1 }}>Fila de demandas</h2>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline"
+            onClick={() => {
+              const stamp = new Date().toISOString().slice(0, 10);
+              downloadCsv(`fisaval-demandas-${stamp}.csv`, buildDemandasCsvRows(lista));
+            }}
+          >
+            Exportar CSV
+          </button>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
             Fiscal padrão (OS)
             <select value={fiscalPadrao} onChange={(e) => setFiscalPadrao(e.target.value)}>

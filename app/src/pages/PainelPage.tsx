@@ -5,9 +5,15 @@ import { useOnline } from '@/hooks/useOnline';
 import type { OrdemServico, OsStatus, Vistoria } from '@/types';
 import { PAINEL_MAP_LEGEND, PainelMap } from '@/components/PainelMap';
 import {
+  buildOrdensCsvRows,
+  downloadCsv,
+  printRelatorio,
+} from '@/lib/export';
+import {
   CHECKLIST_ITEMS,
   getKpis,
   getVistoriaForOs,
+  getVistoriaMapByOs,
   homologar,
   listAllOrdens,
   refreshFromServer,
@@ -81,6 +87,28 @@ export function PainelPage() {
     });
   }, [ordens, filtroStatus, filtroFiscal]);
 
+  async function exportCsv(lista: OrdemServico[], suffix: string) {
+    const vMap = await getVistoriaMapByOs();
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`fisaval-os-${suffix}-${stamp}.csv`, buildOrdensCsvRows(lista, vMap));
+  }
+
+  async function imprimirRelatorio() {
+    const vMap = await getVistoriaMapByOs();
+    printRelatorio({
+      geradoEm: new Date().toLocaleString('pt-BR'),
+      kpis: {
+        osHoje: kpis.osHoje,
+        concluidas: kpis.concluidas,
+        homolog: kpis.homolog,
+        divergencias: kpis.divergencias,
+      },
+      ordens,
+      homologQueue,
+      vistoriaByOs: vMap,
+    });
+  }
+
   return (
     <>
       <div className="kpi-grid">
@@ -96,6 +124,24 @@ export function PainelPage() {
         <div className="kpi">
           <strong>{kpis.divergencias}</strong>Divergências
         </div>
+      </div>
+
+      <div className="card export-bar">
+        <h2 style={{ margin: '0 0 0.5rem' }}>Relatórios</h2>
+        <div className="export-actions">
+          <button type="button" className="btn btn-sm btn-outline" onClick={() => void exportCsv(ordensMapa, 'filtro')}>
+            CSV — OS do filtro ({ordensMapa.length})
+          </button>
+          <button type="button" className="btn btn-sm btn-outline" onClick={() => void exportCsv(ordens, 'todas')}>
+            CSV — todas as OS ({ordens.length})
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => void imprimirRelatorio()}>
+            Imprimir / salvar PDF
+          </button>
+        </div>
+        <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+          CSV abre no Excel (separador ;). PDF: use &quot;Salvar como PDF&quot; na janela de impressão.
+        </p>
       </div>
 
       <div className="card">
