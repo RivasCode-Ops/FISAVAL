@@ -42,6 +42,7 @@ Auditoria: evento `rota.otimizar`.
 
 ## Próximo
 
-- Restrições de janela de tempo / capacidade por fiscal
+- Prazo na OS, rota por urgência e geofence — ver [FASE14.md](FASE14.md)
+- Janelas horárias no VROOM
 - Banco isolado por tenant
 - Assinatura ICP-Brasil

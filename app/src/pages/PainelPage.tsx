@@ -120,7 +120,7 @@ export function PainelPage() {
       setRotaGestorMsg('Nenhuma OS ativa para este fiscal.');
       return;
     }
-    const motor = r.engine === 'vroom' ? 'VROOM' : 'proximidade';
+    const motor = r.engine === 'vroom' ? 'VROOM' : 'prazo+GPS';
     setRotaGestorMsg(
       `${r.paradas} parada(s) · ~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})`,
     );

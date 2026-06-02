@@ -28,6 +28,8 @@ app.get('/api/fisaval/config', (_req, res) => {
     tenantId: config.tenantId,
     version: '0.4',
     vroom: !!config.vroomUrl,
+    checkinRadiusM: config.checkinRadiusM,
+    maxOsAtivasFiscal: config.maxOsAtivasFiscal,
   });
 });
 

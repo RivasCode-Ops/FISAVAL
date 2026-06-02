@@ -19,6 +19,10 @@ export const config = {
   tenantId: process.env.TENANT_ID || 'demo',
   /** URL do serviço VROOM (ex. http://127.0.0.1:3000). Vazio = vizinho mais próximo. */
   vroomUrl: process.env.VROOM_URL || '',
+  /** Raio máximo (m) para check-in no imóvel. 0 = não valida distância. */
+  checkinRadiusM: Number(process.env.CHECKIN_RADIUS_M) || 200,
+  /** Máximo de OS ativas por fiscal; 0 = sem limite. */
+  maxOsAtivasFiscal: Number(process.env.MAX_OS_ATIVAS_FISCAL) || 0,
 };
 
 export const usePostgres = () => !!config.databaseUrl;

@@ -1,4 +1,4 @@
-import type { OrdemServico, OsStatus } from './types.js';
+import type { OrdemServico, OsStatus, Prioridade } from './types.js';
 
 export type GeoPoint = { lat: number; lng: number };
 
@@ -23,6 +23,40 @@ export function distKm(a: GeoPoint, b: GeoPoint): number {
     Math.sin(dLat / 2) ** 2 +
     Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+const PRI_RANK: Record<Prioridade, number> = { alta: 0, media: 1, baixa: 2 };
+
+export function daysUntilPrazo(prazo: string): number {
+  const p = prazo.slice(0, 10);
+  const t = new Date(`${p}T12:00:00`).getTime();
+  return Math.floor((t - Date.now()) / 86_400_000);
+}
+
+export function urgenciaScore(o: { prioridade?: Prioridade; prazo?: string }): number {
+  const pri = o.prioridade ? PRI_RANK[o.prioridade] : 1;
+  const days = o.prazo ? daysUntilPrazo(o.prazo) : 30;
+  return pri * 1000 + Math.max(0, days);
+}
+
+/** Vizinho mais próximo com desempate por prioridade/prazo. */
+export function ordenarPorPrazoEProximidade(ordens: OrdemServico[], start: GeoPoint): OrdemServico[] {
+  const rest = [...ordens];
+  const out: OrdemServico[] = [];
+  let cur = start;
+  while (rest.length) {
+    const dists = rest.map((o) => distKm(cur, { lat: o.lat, lng: o.lng }));
+    const minD = Math.min(...dists);
+    const near = rest.filter((_, i) => dists[i] <= minD * 1.5 + 0.05);
+    const pool = near.length ? near : rest;
+    pool.sort((a, b) => urgenciaScore(a) - urgenciaScore(b));
+    const next = pool[0];
+    const idx = rest.indexOf(next);
+    rest.splice(idx, 1);
+    out.push(next);
+    cur = { lat: next.lat, lng: next.lng };
+  }
+  return out;
 }
 
 export function ordenarPorProximidade(ordens: OrdemServico[], start: GeoPoint): OrdemServico[] {

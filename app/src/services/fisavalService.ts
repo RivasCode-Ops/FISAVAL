@@ -26,13 +26,18 @@ import {
 } from '@/db/fotos';
 import { parseDemandasCsvText } from '@/lib/csvParse';
 import { filterDemandas, filterOrdens, getRuntimeTenantId } from '@/lib/tenantFilter';
-import { estimateRotaStats, filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from '@/lib/rota';
+import {
+  estimateRotaStats,
+  filtrarOsAtivas,
+  ordenarPorPrazoEProximidade,
+  type GeoPoint,
+} from '@/lib/rota';
 
 export type OtimizarRotaResult = {
   paradas: number;
   distanciaKm: number;
   duracaoMinEst: number;
-  engine: 'vroom' | 'proximidade';
+  engine: 'vroom' | 'prazo-proximidade';
 };
 import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
@@ -184,6 +189,8 @@ export async function gerarOs(demandaId: string, fiscalId: string, fiscalNome: s
     inscricao: demanda.inscricao ?? '—',
     endereco: demanda.endereco ?? demanda.bairro,
     bairro: demanda.bairro,
+    prioridade: demanda.prioridade,
+    prazo: demanda.prazo,
     status: 'atribuida',
     lat: demanda.lat,
     lng: demanda.lng,
@@ -231,11 +238,11 @@ export async function otimizarRotaFiscal(
     (await listOrdensTenantScoped()).filter((o) => o.fiscalId === fiscalId),
   );
   if (!ativas.length) {
-    return { paradas: 0, distanciaKm: 0, duracaoMinEst: 0, engine: 'proximidade' };
+    return { paradas: 0, distanciaKm: 0, duracaoMinEst: 0, engine: 'prazo-proximidade' };
   }
 
   const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
-  const ordered = ativas.length >= 2 ? ordenarPorProximidade(ativas, origin) : ativas;
+  const ordered = ativas.length >= 2 ? ordenarPorPrazoEProximidade(ativas, origin) : ativas;
   const stats = estimateRotaStats(ordered, origin);
   const t = now();
   await db.transaction('rw', [db.ordens], async () => {
@@ -244,7 +251,12 @@ export async function otimizarRotaFiscal(
     }
   });
   await pushApi();
-  return { paradas: ordered.length, distanciaKm: stats.distanciaKm, duracaoMinEst: stats.duracaoMinEst, engine: 'proximidade' };
+  return {
+    paradas: ordered.length,
+    distanciaKm: stats.distanciaKm,
+    duracaoMinEst: stats.duracaoMinEst,
+    engine: 'prazo-proximidade',
+  };
 }
 
 export async function listAllOrdens() {

@@ -3,7 +3,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { config } from './config.js';
-import { estimateRotaStats, filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from './rota.js';
+import {
+  estimateRotaStats,
+  filtrarOsAtivas,
+  ordenarPorPrazoEProximidade,
+  type GeoPoint,
+} from './rota.js';
 import { matchesTenant } from './tenant.js';
 import { ordenarComVroom } from './vroom.js';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from './types.js';
@@ -33,6 +38,8 @@ export async function initPgSchema() {
     pgHasGeom = false;
   }
   await p.query('ALTER TABLE demandas ADD COLUMN IF NOT EXISTS tenant_id TEXT');
+  await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS prioridade TEXT');
+  await p.query('ALTER TABLE ordens ADD COLUMN IF NOT EXISTS prazo TEXT');
 }
 
 type PgQuery = Pick<pg.Pool, 'query'>;
@@ -135,6 +142,8 @@ function rowOrdem(r: Record<string, unknown>): OrdemServico {
     inscricao: r.inscricao as string,
     endereco: r.endereco as string,
     bairro: r.bairro as string,
+    prioridade: (r.prioridade as Prioridade) ?? undefined,
+    prazo: (r.prazo as string) ?? undefined,
     status: r.status as OsStatus,
     lat: Number(r.lat),
     lng: Number(r.lng),
@@ -204,8 +213,8 @@ export async function seedPg() {
     createdAt: t,
   });
   await getPool().query(
-    `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, status, lat, lng, rota_ordem, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1,$11,$11)`,
+    `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, status, lat, lng, rota_ordem, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,1,$13,$13)`,
     [
       'OS-8821',
       'D-1042',
@@ -214,6 +223,8 @@ export async function seedPg() {
       '12.034.0056.0001',
       'R. das Flores, 123',
       'Centro',
+      'alta',
+      '2026-06-05',
       'atribuida',
       -23.5505,
       -46.6333,
@@ -279,8 +290,8 @@ export const pgRepo = {
         await client.query('DELETE FROM ordens');
         for (const x of partial.ordens) {
           await client.query(
-            `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, status, lat, lng, rota_ordem, created_at, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, status, lat, lng, rota_ordem, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
             [
               x.id,
               x.demandaId,
@@ -289,6 +300,8 @@ export const pgRepo = {
               x.inscricao,
               x.endereco,
               x.bairro,
+              x.prioridade ?? null,
+              x.prazo ?? null,
               x.status,
               x.lat,
               x.lng,
@@ -377,6 +390,10 @@ export const pgRepo = {
     if (!dem) return null;
     const demRow = rowDemanda(dem);
     if (!matchesTenant(demRow.tenantId)) return null;
+    if (config.maxOsAtivasFiscal > 0) {
+      const ativas = filtrarOsAtivas(await pgRepo.listOrdens(fiscalId));
+      if (ativas.length >= config.maxOsAtivasFiscal) return null;
+    }
     const t = now();
     const id = uid('OS');
     const { rows: cnt } = await getPool().query(
@@ -384,8 +401,8 @@ export const pgRepo = {
       [fiscalId],
     );
     await getPool().query(
-      `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, status, lat, lng, rota_ordem, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'atribuida',$8,$9,$10,$11,$11)`,
+      `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, prioridade, prazo, status, lat, lng, rota_ordem, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'atribuida',$10,$11,$12,$13,$13)`,
       [
         id,
         demandaId,
@@ -394,8 +411,10 @@ export const pgRepo = {
         dem.inscricao ?? '—',
         dem.endereco ?? dem.bairro,
         dem.bairro,
-        dem.lat,
-        dem.lng,
+        demRow.prioridade,
+        demRow.prazo,
+        demRow.lat,
+        demRow.lng,
         cnt[0].c + 1,
         t,
       ],
@@ -433,21 +452,21 @@ export const pgRepo = {
   async otimizarRota(fiscalId: string, start?: GeoPoint) {
     const ativas = filtrarOsAtivas(await pgRepo.listOrdens(fiscalId));
     if (!ativas.length) {
-      return { ordens: [], paradas: 0, distanciaKm: 0, duracaoMinEst: 0, engine: 'proximidade' as const };
+      return { ordens: [], paradas: 0, distanciaKm: 0, duracaoMinEst: 0, engine: 'prazo-proximidade' as const };
     }
     const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
     let ordered: OrdemServico[];
-    let engine: 'vroom' | 'proximidade' = 'proximidade';
+    let engine: 'vroom' | 'prazo-proximidade' = 'prazo-proximidade';
     if (config.vroomUrl && ativas.length >= 2) {
       const idx = await ordenarComVroom(config.vroomUrl, origin, ativas);
       if (idx) {
         ordered = idx.map((i) => ativas[i]);
         engine = 'vroom';
       } else {
-        ordered = ordenarPorProximidade(ativas, origin);
+        ordered = ordenarPorPrazoEProximidade(ativas, origin);
       }
     } else {
-      ordered = ativas.length >= 2 ? ordenarPorProximidade(ativas, origin) : ativas;
+      ordered = ativas.length >= 2 ? ordenarPorPrazoEProximidade(ativas, origin) : ativas;
     }
     const stats = estimateRotaStats(ordered, origin);
     const t = now();

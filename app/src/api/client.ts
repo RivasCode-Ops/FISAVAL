@@ -137,7 +137,7 @@ export const apiClient = {
       paradas: number;
       distanciaKm: number;
       duracaoMinEst: number;
-      engine: 'vroom' | 'proximidade';
+      engine: 'vroom' | 'prazo-proximidade';
     }>('/ordens/otimizar-rota', {
       method: 'POST',
       body: JSON.stringify({

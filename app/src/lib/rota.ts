@@ -1,4 +1,4 @@
-import type { OrdemServico } from '@/types';
+import type { OrdemServico, Prioridade } from '@/types';
 
 export type GeoPoint = { lat: number; lng: number };
 
@@ -27,6 +27,37 @@ export function filtrarOsAtivas(ordens: OrdemServico[]): OrdemServico[] {
 }
 
 /** Vizinho mais próximo a partir de `start` (MVP roteirização). */
+const PRI_RANK: Record<Prioridade, number> = { alta: 0, media: 1, baixa: 2 };
+
+function daysUntilPrazo(prazo: string): number {
+  const p = prazo.slice(0, 10);
+  return Math.floor((new Date(`${p}T12:00:00`).getTime() - Date.now()) / 86_400_000);
+}
+
+function urgenciaScore(o: { prioridade?: Prioridade; prazo?: string }): number {
+  const pri = o.prioridade ? PRI_RANK[o.prioridade] : 1;
+  const days = o.prazo ? daysUntilPrazo(o.prazo) : 30;
+  return pri * 1000 + Math.max(0, days);
+}
+
+export function ordenarPorPrazoEProximidade(ordens: OrdemServico[], start: GeoPoint): OrdemServico[] {
+  const rest = [...ordens];
+  const out: OrdemServico[] = [];
+  let cur = start;
+  while (rest.length) {
+    const dists = rest.map((o) => distKm(cur, { lat: o.lat, lng: o.lng }));
+    const minD = Math.min(...dists);
+    const near = rest.filter((_, i) => dists[i] <= minD * 1.5 + 0.05);
+    const pool = near.length ? near : rest;
+    pool.sort((a, b) => urgenciaScore(a) - urgenciaScore(b));
+    const next = pool[0];
+    rest.splice(rest.indexOf(next), 1);
+    out.push(next);
+    cur = { lat: next.lat, lng: next.lng };
+  }
+  return out;
+}
+
 export function ordenarPorProximidade(ordens: OrdemServico[], start: GeoPoint): OrdemServico[] {
   const rest = [...ordens];
   const out: OrdemServico[] = [];
@@ -66,4 +97,13 @@ export function estimateRotaStats(
     );
   }
   return { distanciaKm: Math.round(km * 10) / 10, duracaoMinEst: Math.round((km / 35) * 60) };
+}
+
+export function distanciaMetros(a: GeoPoint, b: GeoPoint): number {
+  return Math.round(distKm(a, b) * 1000);
+}
+
+export function prazoVencido(prazo?: string): boolean {
+  if (!prazo) return false;
+  return daysUntilPrazo(prazo) < 0;
 }

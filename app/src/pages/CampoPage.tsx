@@ -21,8 +21,8 @@ import {
   updateOsStatus,
   uploadFoto,
 } from '@/services/fisavalService';
-import { filtrarOsAtivas } from '@/lib/rota';
-import { isApiMode } from '@/api/config';
+import { distanciaMetros, filtrarOsAtivas, prazoVencido } from '@/lib/rota';
+import { getApiUrl, isApiMode } from '@/api/config';
 import { useNovasOsAlert } from '@/hooks/useNovasOsAlert';
 import { subscribeWebPush } from '@/lib/push';
 
@@ -38,8 +38,20 @@ export function CampoPage() {
   const [pushMsg, setPushMsg] = useState('');
   const [assinaturaUrl, setAssinaturaUrl] = useState<string | null>(null);
   const [rotaResumo, setRotaResumo] = useState<string | null>(null);
+  const [checkinRadiusM, setCheckinRadiusM] = useState(200);
 
   useNovasOsAlert(ordens.length, true);
+
+  useEffect(() => {
+    const base = getApiUrl();
+    if (!base) return;
+    void fetch(`${base}/api/fisaval/config`)
+      .then((r) => r.json())
+      .then((c: { checkinRadiusM?: number }) => {
+        if (c.checkinRadiusM != null) setCheckinRadiusM(c.checkinRadiusM);
+      })
+      .catch(() => {});
+  }, []);
 
   const reload = useCallback(async () => {
     const list = await listOrdensFiscal(session.userId);
@@ -142,7 +154,8 @@ export function CampoPage() {
     const start = pos ? { lat: pos.coords.latitude, lng: pos.coords.longitude } : undefined;
     const r = await otimizarRotaFiscal(session.userId, start);
     if (r.paradas) {
-      const motor = r.engine === 'vroom' ? 'VROOM' : 'proximidade';
+      const motor =
+        r.engine === 'vroom' ? 'VROOM' : r.engine === 'prazo-proximidade' ? 'prazo+GPS' : r.engine;
       setRotaResumo(`~${r.distanciaKm} km · ~${r.duracaoMinEst} min (${motor})`);
       setMsg(`Rota otimizada: ${r.paradas} parada(s).`);
     } else {
@@ -180,6 +193,18 @@ export function CampoPage() {
               <small>{o.endereco}</small>
               <br />
               <span className="badge b-status">#{o.rotaOrdem}</span>{' '}
+              {o.prioridade && (
+                <span
+                  className={`badge ${o.prioridade === 'alta' ? 'b-pri-alta' : o.prioridade === 'media' ? 'b-pri-media' : 'b-pri-baixa'}`}
+                >
+                  {o.prioridade}
+                </span>
+              )}{' '}
+              {o.prazo && (
+                <span className={`badge ${prazoVencido(o.prazo) ? 'b-pri-alta' : 'b-status'}`}>
+                  {o.prazo.slice(0, 10)}
+                </span>
+              )}{' '}
               <span className="badge b-status">{o.status}</span>
             </div>
           ))}

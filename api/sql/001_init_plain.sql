@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS ordens (
   inscricao TEXT NOT NULL,
   endereco TEXT NOT NULL,
   bairro TEXT NOT NULL,
+  prioridade TEXT,
+  prazo TEXT,
   status TEXT NOT NULL,
   lat DOUBLE PRECISION NOT NULL,
   lng DOUBLE PRECISION NOT NULL,

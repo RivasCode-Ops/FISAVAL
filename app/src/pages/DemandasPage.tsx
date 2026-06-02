@@ -67,8 +67,12 @@ export function DemandasPage() {
   async function onGerarOs(demandaId: string) {
     const fiscal = fiscais.find((f) => f.id === fiscalPadrao);
     if (!fiscal) return;
-    await gerarOs(demandaId, fiscal.id, fiscal.nome);
-    setMsg(`OS gerada para ${fiscal.nome}.`);
+    try {
+      await gerarOs(demandaId, fiscal.id, fiscal.nome);
+      setMsg(`OS gerada para ${fiscal.nome}.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Não foi possível gerar a OS.');
+    }
     await reload();
   }
 

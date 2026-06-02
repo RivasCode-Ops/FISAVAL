@@ -126,9 +126,26 @@ export function createRoutes(): Router {
     '/demandas/:id/gerar-os',
     asyncHandler(async (req, res) => {
       const { fiscalId, fiscalNome } = req.body as { fiscalId: string; fiscalNome: string };
-      const os = await getRepo().gerarOs(req.params.id, fiscalId, fiscalNome);
-      if (!os) {
+      const repo = getRepo();
+      const demandas = await repo.listDemandas();
+      const demanda = demandas.find((d) => d.id === req.params.id);
+      if (!demanda) {
         res.status(404).json({ error: 'Demanda não encontrada' });
+        return;
+      }
+      if (config.maxOsAtivasFiscal > 0) {
+        const ordensFiscal = await repo.listOrdens(fiscalId);
+        const { filtrarOsAtivas } = await import('./rota.js');
+        if (filtrarOsAtivas(ordensFiscal).length >= config.maxOsAtivasFiscal) {
+          res.status(409).json({
+            error: `Limite de ${config.maxOsAtivasFiscal} OS ativas por fiscal atingido`,
+          });
+          return;
+        }
+      }
+      const os = await repo.gerarOs(req.params.id, fiscalId, fiscalNome);
+      if (!os) {
+        res.status(404).json({ error: 'Não foi possível gerar a OS' });
         return;
       }
       logAudit(auditUser(getAuth(req)!), 'os.gerar', {

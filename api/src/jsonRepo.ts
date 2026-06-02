@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './config.js';
-import { estimateRotaStats, filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from './rota.js';
+import {
+  estimateRotaStats,
+  filtrarOsAtivas,
+  ordenarPorPrazoEProximidade,
+  ordenarPorProximidade,
+  type GeoPoint,
+} from './rota.js';
 import { filterDemandas, filterOrdens, matchesTenant } from './tenant.js';
 import { ordenarComVroom } from './vroom.js';
 import type { ImportRow } from './importCsv.js';
@@ -77,6 +83,8 @@ export function seedJson(): DbShape {
       inscricao: '12.034.0056.0001',
       endereco: 'R. das Flores, 123',
       bairro: 'Centro',
+      prioridade: 'alta',
+      prazo: '2026-06-05',
       status: 'atribuida',
       lat: -23.5505,
       lng: -46.6333,
@@ -219,22 +227,22 @@ export const jsonRepo = {
         paradas: 0,
         distanciaKm: 0,
         duracaoMinEst: 0,
-        engine: 'proximidade' as const,
+        engine: 'prazo-proximidade' as const,
       };
     }
     const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
     let ordered: OrdemServico[];
-    let engine: 'vroom' | 'proximidade' = 'proximidade';
+    let engine: 'vroom' | 'prazo-proximidade' = 'prazo-proximidade';
     if (config.vroomUrl && ativas.length >= 2) {
       const idx = await ordenarComVroom(config.vroomUrl, origin, ativas);
       if (idx) {
         ordered = idx.map((i) => ativas[i]);
         engine = 'vroom';
       } else {
-        ordered = ordenarPorProximidade(ativas, origin);
+        ordered = ordenarPorPrazoEProximidade(ativas, origin);
       }
     } else {
-      ordered = ativas.length >= 2 ? ordenarPorProximidade(ativas, origin) : ativas;
+      ordered = ativas.length >= 2 ? ordenarPorPrazoEProximidade(ativas, origin) : ativas;
     }
     const stats = estimateRotaStats(ordered, origin);
     const t = now();
