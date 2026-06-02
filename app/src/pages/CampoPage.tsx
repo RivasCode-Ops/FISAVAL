@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OrdemServico, Vistoria } from '@/types';
-import { OsMap } from '@/components/OsMap';
+import { RotaMap } from '@/components/RotaMap';
+import { mapsDirUrl } from '@/lib/rota';
 import { useAuthStore } from '@/store/authStore';
 import type { VistoriaFoto } from '@/types';
 import {
@@ -10,11 +11,13 @@ import {
   getOrCreateVistoria,
   listFotos,
   listOrdensFiscal,
+  otimizarRotaFiscal,
   saveVistoria,
   syncPendentes,
   updateOsStatus,
   uploadFoto,
 } from '@/services/fisavalService';
+import { filtrarOsAtivas } from '@/lib/rota';
 import { isApiMode } from '@/api/config';
 
 export function CampoPage() {
@@ -111,9 +114,22 @@ export function CampoPage() {
 
   async function sync() {
     const n = await syncPendentes(session.userId);
-    setMsg(n ? `${n} vistoria(s) sincronizada(s).` : 'Nada pendente.');
+    setMsg(n ? `${n} item(ns) sincronizado(s) com o servidor.` : 'Nada pendente.');
     await reload();
   }
+
+  async function otimizarRota() {
+    const pos = await new Promise<GeolocationPosition | null>((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { timeout: 8000 });
+    });
+    const start = pos ? { lat: pos.coords.latitude, lng: pos.coords.longitude } : undefined;
+    const n = await otimizarRotaFiscal(session.userId, start);
+    setMsg(n ? `Rota otimizada (${n} paradas).` : 'Nenhuma OS ativa para ordenar.');
+    await reload();
+  }
+
+  const rotaAtiva = filtrarOsAtivas(ordens);
 
   return (
     <div className="grid2">
@@ -146,7 +162,15 @@ export function CampoPage() {
         <div className="card">
           <h2>{selected.id}</h2>
           <p style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>{selected.endereco}</p>
-          <OsMap lat={selected.lat} lng={selected.lng} />
+          <a
+            className="btn btn-outline btn-sm"
+            style={{ display: 'inline-block', marginBottom: '0.5rem' }}
+            href={mapsDirUrl(selected.lat, selected.lng)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Abrir no mapa (navegação)
+          </a>
           <button type="button" className="btn" style={{ width: '100%', marginBottom: '0.5rem' }} onClick={() => void checkIn()}>
             Check-in GPS
           </button>

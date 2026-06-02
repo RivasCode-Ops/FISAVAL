@@ -9,6 +9,7 @@ import {
   markFotoSynced,
   saveFotoLocal,
 } from '@/db/fotos';
+import { filtrarOsAtivas, ordenarPorProximidade, type GeoPoint } from '@/lib/rota';
 import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria, VistoriaFoto } from '@/types';
 
 const now = () => new Date().toISOString();
@@ -107,7 +108,28 @@ export async function gerarOs(demandaId: string, fiscalId: string, fiscalNome: s
 
 export async function listOrdensFiscal(fiscalId: string) {
   const list = await db.ordens.where('fiscalId').equals(fiscalId).toArray();
-  return list.sort((a, b) => a.rotaOrdem - b.rotaOrdem);
+  return list.sort((a, b) => a.rotaOrdem - b.rotaOrdem || a.updatedAt.localeCompare(b.updatedAt));
+}
+
+export async function getVistoriaForOs(osId: string) {
+  return db.vistorias.where('osId').equals(osId).first();
+}
+
+export async function otimizarRotaFiscal(fiscalId: string, start?: GeoPoint): Promise<number> {
+  const ativas = filtrarOsAtivas(await db.ordens.where('fiscalId').equals(fiscalId).toArray());
+  if (ativas.length < 2) return ativas.length;
+
+  const origin = start ?? { lat: ativas[0].lat, lng: ativas[0].lng };
+
+  const ordered = ordenarPorProximidade(ativas, origin);
+  const t = now();
+  await db.transaction('rw', [db.ordens], async () => {
+    for (let i = 0; i < ordered.length; i++) {
+      await db.ordens.update(ordered[i].id, { rotaOrdem: i + 1, updatedAt: t });
+    }
+  });
+  await pushApi();
+  return ordered.length;
 }
 
 export async function listAllOrdens() {
@@ -185,14 +207,39 @@ export async function syncPendentes(fiscalId: string): Promise<number> {
     .filter((o) => o.status === 'pendente_sync')
     .toArray();
   let n = 0;
+  const t = now();
+
   for (const os of ordens) {
     const v = await db.vistorias.where('osId').equals(os.id).first();
-    if (v) {
-      await db.vistorias.update(v.id, { syncStatus: 'synced', updatedAt: now() });
-      await db.ordens.update(os.id, { status: 'homologacao', updatedAt: now() });
-      n++;
+    if (!v) continue;
+
+    if (isApiMode() && navigator.onLine) {
+      try {
+        const synced = await apiClient.patchVistoria(v.id, {
+          checklist: v.checklist,
+          divergencia: v.divergencia,
+          justificativa: v.justificativa,
+          checkInLat: v.checkInLat,
+          checkInLng: v.checkInLng,
+          checkInAt: v.checkInAt,
+          concluidaAt: v.concluidaAt,
+          syncStatus: 'synced',
+        });
+        await db.vistorias.put(synced);
+        const osRemote = await apiClient.patchOrdem(os.id, 'homologacao');
+        await db.ordens.put(osRemote ?? { ...os, status: 'homologacao', updatedAt: t });
+        n++;
+        continue;
+      } catch {
+        /* tenta push em lote abaixo */
+      }
     }
+
+    await db.vistorias.update(v.id, { syncStatus: 'synced', updatedAt: t });
+    await db.ordens.update(os.id, { status: 'homologacao', updatedAt: t });
+    n++;
   }
+
   const fotosN = await syncFotosPendentes();
   await pushApi();
   return n + fotosN;

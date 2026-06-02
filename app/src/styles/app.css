@@ -78,11 +78,53 @@ th { color: var(--muted); }
 
 .os-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .os-card {
-  padding: 0.75rem; border-radius: var(--radius); background: var(--surface2);
-  border: 2px solid transparent; cursor: pointer;
+  position: relative;
+  padding: 0.75rem 0.75rem 0.75rem 2rem;
+  border-radius: var(--radius);
+  background: var(--surface2);
+  border: 2px solid transparent;
+  cursor: pointer;
 }
 .os-card.selected { border-color: var(--accent); }
 .map-box { height: 200px; border-radius: var(--radius); overflow: hidden; margin: 0.75rem 0; }
+.map-box--rota { height: 220px; }
+.map-box--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface2);
+}
+.rota-marker-wrap { background: none; border: none; }
+.rota-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.rota-marker--sel { background: var(--ok); transform: scale(1.1); }
+.rota-num {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.65rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .checklist label { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.4rem; color: var(--text); }
 
 .grid2 { display: grid; gap: 1rem; }

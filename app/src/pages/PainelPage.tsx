@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { OrdemServico } from '@/types';
-import { getKpis, homologar, listAllOrdens } from '@/services/fisavalService';
+import type { Vistoria } from '@/types';
+import {
+  CHECKLIST_ITEMS,
+  getKpis,
+  getVistoriaForOs,
+  homologar,
+  listAllOrdens,
+} from '@/services/fisavalService';
 
 export function PainelPage() {
   const [kpis, setKpis] = useState({ osHoje: 0, concluidas: 0, homolog: 0, divergencias: 0, fiscais: [] as { nome: string; id: string }[] });
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [homologQueue, setHomologQueue] = useState<OrdemServico[]>([]);
+  const [vistorias, setVistorias] = useState<Record<string, Vistoria>>({});
 
   async function reload() {
     const k = await getKpis();
@@ -18,7 +26,14 @@ export function PainelPage() {
     });
     const all = await listAllOrdens();
     setOrdens(all);
-    setHomologQueue(all.filter((o) => o.status === 'homologacao'));
+    const queue = all.filter((o) => o.status === 'homologacao');
+    setHomologQueue(queue);
+    const vs: Record<string, Vistoria> = {};
+    for (const o of queue) {
+      const v = await getVistoriaForOs(o.id);
+      if (v) vs[o.id] = v;
+    }
+    setVistorias(vs);
   }
 
   useEffect(() => {
@@ -52,11 +67,27 @@ export function PainelPage() {
           {homologQueue.length === 0 ? (
             <p style={{ color: 'var(--muted)' }}>Nenhuma vistoria aguardando.</p>
           ) : (
-            homologQueue.map((o) => (
+            homologQueue.map((o) => {
+              const v = vistorias[o.id];
+              const checks = v
+                ? CHECKLIST_ITEMS.filter((c) => v.checklist[c.id]).map((c) => c.label)
+                : [];
+              return (
               <div key={o.id} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
                 <strong>{o.id}</strong> — {o.inscricao}
                 <br />
                 <small>{o.endereco} · {o.fiscalNome}</small>
+                {v && (
+                  <p style={{ fontSize: '0.85rem', margin: '0.35rem 0', color: 'var(--muted)' }}>
+                    {v.divergencia ? (
+                      <span className="badge b-pri-alta">Divergência</span>
+                    ) : (
+                      <span className="badge b-pri-baixa">Sem divergência</span>
+                    )}
+                    {checks.length > 0 && ` · ${checks.length} itens OK`}
+                    {v.concluidaAt && ` · ${new Date(v.concluidaAt).toLocaleString('pt-BR')}`}
+                  </p>
+                )}
                 <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
                   <button type="button" className="btn btn-sm btn-ok" onClick={() => void homologar(o.id, true).then(reload)}>
                     Aprovar
@@ -66,7 +97,8 @@ export function PainelPage() {
                   </button>
                 </div>
               </div>
-            ))
+            );
+            })
           )}
         </div>
       </div>
