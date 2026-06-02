@@ -12,6 +12,9 @@ export const config = {
   dataDir: process.env.DATA_DIR || join(apiRoot, 'data'),
   /** Origens CORS separadas por vírgula; vazio = qualquer origem (dev). */
   corsOrigin: process.env.CORS_ORIGIN || '',
+  vapidPublic: process.env.VAPID_PUBLIC_KEY || '',
+  vapidPrivate: process.env.VAPID_PRIVATE_KEY || '',
+  vapidSubject: process.env.VAPID_SUBJECT || 'mailto:gestor@fisaval.local',
 };
 
 export const usePostgres = () => !!config.databaseUrl;

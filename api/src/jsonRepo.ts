@@ -150,6 +150,7 @@ export const jsonRepo = {
         dem.updatedAt = t;
       }
     });
+    void import('./push.js').then((m) => m.notifyNewOs(fiscalId, os.id, os.endereco));
     return os;
   },
   async listOrdens(fiscalId?: string) {

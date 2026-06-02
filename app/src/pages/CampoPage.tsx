@@ -19,6 +19,8 @@ import {
 } from '@/services/fisavalService';
 import { filtrarOsAtivas } from '@/lib/rota';
 import { isApiMode } from '@/api/config';
+import { useNovasOsAlert } from '@/hooks/useNovasOsAlert';
+import { subscribeWebPush } from '@/lib/push';
 
 export function CampoPage() {
   const session = useAuthStore((s) => s.session)!;
@@ -29,6 +31,9 @@ export function CampoPage() {
   const [msg, setMsg] = useState('');
   const [fotos, setFotos] = useState<VistoriaFoto[]>([]);
   const [fotoUrls, setFotoUrls] = useState<Record<string, string>>({});
+  const [pushMsg, setPushMsg] = useState('');
+
+  useNovasOsAlert(ordens.length, true);
 
   const reload = useCallback(async () => {
     const list = await listOrdensFiscal(session.userId);
@@ -156,6 +161,28 @@ export function CampoPage() {
         <button type="button" className="btn" style={{ marginTop: '0.75rem', width: '100%' }} onClick={() => void sync()}>
           Sincronizar pendentes
         </button>
+        {isApiMode() && (
+          <button
+            type="button"
+            className="btn btn-outline"
+            style={{ marginTop: '0.5rem', width: '100%' }}
+            onClick={() => {
+              void subscribeWebPush().then((r) => {
+                const labels: Record<string, string> = {
+                  ok: 'Alertas push ativados.',
+                  denied: 'Permissão de notificação negada.',
+                  'no-vapid': 'Push não configurado no servidor (VAPID).',
+                  unsupported: 'Navegador sem suporte a push.',
+                  error: 'Falha ao registrar push.',
+                };
+                setPushMsg(labels[r] ?? r);
+              });
+            }}
+          >
+            Ativar alertas de nova OS
+          </button>
+        )}
+        {pushMsg && <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '0.35rem' }}>{pushMsg}</p>}
       </div>
 
       {selected && (

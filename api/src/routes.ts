@@ -2,7 +2,14 @@ import { Router } from 'express';
 import multer from 'multer';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { authRequired, signToken } from './auth.js';
+import { authRequired, getAuth, requireRoles, signToken } from './auth.js';
+import { demandasCsvRows, ordensCsvRows, toCsv } from './csvExport.js';
+import {
+  getVapidPublicKey,
+  isPushEnabled,
+  removePushSubscription,
+  savePushSubscription,
+} from './push.js';
 import { config } from './config.js';
 import { getRepo } from './repo.js';
 import { uid } from './jsonRepo.js';
@@ -223,6 +230,76 @@ export function createRoutes(): Router {
     '/kpis',
     asyncHandler(async (_req, res) => {
       res.json(await getRepo().getKpis());
+    }),
+  );
+
+  router.get(
+    '/export/ordens.csv',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (_req, res) => {
+      const repo = getRepo();
+      const ordens = await repo.listOrdens();
+      const vistorias = (await repo.bootstrap()).vistorias;
+      const vMap = new Map(vistorias.map((v) => [v.osId, v]));
+      const csv = toCsv(ordensCsvRows(ordens, vMap));
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="fisaval-ordens.csv"');
+      res.send(csv);
+    }),
+  );
+
+  router.get(
+    '/export/demandas.csv',
+    requireRoles('gestor', 'admin'),
+    asyncHandler(async (_req, res) => {
+      const demandas = await getRepo().listDemandas();
+      const csv = toCsv(demandasCsvRows(demandas));
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="fisaval-demandas.csv"');
+      res.send(csv);
+    }),
+  );
+
+  router.get(
+    '/push/vapid-key',
+    asyncHandler(async (_req, res) => {
+      if (!isPushEnabled()) {
+        res.status(503).json({ error: 'Web Push não configurado (VAPID)' });
+        return;
+      }
+      res.json({ publicKey: getVapidPublicKey() });
+    }),
+  );
+
+  router.post(
+    '/push/subscribe',
+    requireRoles('fiscal'),
+    asyncHandler(async (req, res) => {
+      if (!isPushEnabled()) {
+        res.status(503).json({ error: 'Web Push não configurado' });
+        return;
+      }
+      const auth = getAuth(req)!;
+      const body = req.body as {
+        subscription?: { endpoint: string; keys: { p256dh: string; auth: string } };
+      };
+      const sub = body.subscription;
+      if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+        res.status(400).json({ error: 'subscription inválida' });
+        return;
+      }
+      await savePushSubscription(auth.sub, sub);
+      res.json({ ok: true });
+    }),
+  );
+
+  router.post(
+    '/push/unsubscribe',
+    requireRoles('fiscal'),
+    asyncHandler(async (req, res) => {
+      const endpoint = (req.body as { endpoint?: string }).endpoint;
+      if (endpoint) await removePushSubscription(endpoint);
+      res.json({ ok: true });
     }),
   );
 

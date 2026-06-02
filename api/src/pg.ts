@@ -381,6 +381,8 @@ export const pgRepo = {
       demandaId,
       t,
     ]);
+    const endereco = String(dem.endereco ?? dem.bairro);
+    void import('./push.js').then((m) => m.notifyNewOs(fiscalId, id, endereco));
     return rowOrdem(
       (await getPool().query('SELECT * FROM ordens WHERE id = $1', [id])).rows[0] as Record<string, unknown>,
     );

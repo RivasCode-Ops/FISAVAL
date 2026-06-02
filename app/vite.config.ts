@@ -10,7 +10,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: { globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'] },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+        importScripts: ['push-handler.js'],
+      },
       manifest: {
         name: 'FISAVAL',
         short_name: 'FISAVAL',

@@ -12,6 +12,21 @@ export function signToken(user: { id: string; email: string; role: string; nome:
   );
 }
 
+export function getAuth(req: Request): AuthPayload | undefined {
+  return (req as Request & { auth?: AuthPayload }).auth;
+}
+
+export function requireRoles(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const auth = getAuth(req);
+    if (!auth || !roles.includes(auth.role)) {
+      res.status(403).json({ error: 'Sem permissão' });
+      return;
+    }
+    next();
+  };
+}
+
 export function authRequired(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {

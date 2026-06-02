@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isApiMode } from '@/api/config';
+import { downloadAuthenticatedCsv } from '@/lib/apiDownload';
 import { useInterval } from '@/hooks/useInterval';
 import { useOnline } from '@/hooks/useOnline';
 import type { OrdemServico, OsStatus, Vistoria } from '@/types';
@@ -138,6 +139,28 @@ export function PainelPage() {
           <button type="button" className="btn btn-sm" onClick={() => void imprimirRelatorio()}>
             Imprimir / salvar PDF
           </button>
+          {isApiMode() && (
+            <>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={() =>
+                  void downloadAuthenticatedCsv('/export/ordens.csv', `fisaval-ordens-servidor.csv`)
+                }
+              >
+                CSV servidor (OS)
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={() =>
+                  void downloadAuthenticatedCsv('/export/demandas.csv', `fisaval-demandas-servidor.csv`)
+                }
+              >
+                CSV servidor (demandas)
+              </button>
+            </>
+          )}
         </div>
         <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
           CSV abre no Excel (separador ;). PDF: use &quot;Salvar como PDF&quot; na janela de impressão.
