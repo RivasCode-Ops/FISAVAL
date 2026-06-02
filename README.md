@@ -23,9 +23,11 @@ npm install
 npm run dev:all
 ```
 
-Copie `app/.env.example` → `app/.env` (`VITE_API_URL=http://127.0.0.1:8790`). Detalhes: [docs/PRODUCAO.md](docs/PRODUCAO.md) · PostGIS/JWT/fotos: [docs/FASE3.md](docs/FASE3.md) · Fotos offline + Render: [docs/FASE4.md](docs/FASE4.md) · Rota + sync API: [docs/FASE5.md](docs/FASE5.md) · API na nuvem: [docs/HOSPEDAR-API.md](docs/HOSPEDAR-API.md)
+Copie `app/.env.example` → `app/.env` (`VITE_API_URL=http://127.0.0.1:8790`). Detalhes: [docs/PRODUCAO.md](docs/PRODUCAO.md) · PostGIS/JWT/fotos: [docs/FASE3.md](docs/FASE3.md) · Fotos offline + Render: [docs/FASE4.md](docs/FASE4.md) · Rota + sync API: [docs/FASE5.md](docs/FASE5.md) · Mapa painel + deploy: [docs/FASE6.md](docs/FASE6.md) · API na nuvem: [docs/HOSPEDAR-API.md](docs/HOSPEDAR-API.md)
 
 Publicar front: [docs/DEPLOY.md](docs/DEPLOY.md) — **https://rivascode-ops.github.io/FISAVAL/**
+
+**Demo online com API (Render + secret):** [docs/DEPLOY-ONLINE.md](docs/DEPLOY-ONLINE.md)
 
 Se o link der 404: **Settings → Pages → branch `gh-pages` → / (root)** — ver [DEPLOY.md](docs/DEPLOY.md).
 

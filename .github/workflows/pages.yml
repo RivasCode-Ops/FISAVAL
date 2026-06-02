@@ -24,7 +24,12 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: |
           npm ci
-          if [ -n "$VITE_API_URL" ]; then echo "VITE_API_URL=$VITE_API_URL" > .env; fi
+          if [ -n "$VITE_API_URL" ]; then
+            echo "VITE_API_URL=$VITE_API_URL" > .env
+            echo "Build com API: $VITE_API_URL"
+          else
+            echo "::notice::Secret VITE_API_URL não definido — site em modo local (IndexedDB). Ver docs/DEPLOY-ONLINE.md"
+          fi
           npm run build:pages
 
       - name: Prepare site (docs/)

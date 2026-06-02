@@ -2,6 +2,8 @@
 
 O front no GitHub Pages roda só no navegador. Para **vários dispositivos** com os mesmos dados e **upload de fotos**, hospede a API com HTTPS.
 
+**Passo a passo completo (Pages + Render + secret):** [DEPLOY-ONLINE.md](DEPLOY-ONLINE.md)
+
 ## Opção A — Docker (VPS / servidor da prefeitura)
 
 ```bash
