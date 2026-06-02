@@ -1,35 +1,50 @@
-# Fase 2 — API + dados compartilhados
+# Produção — app + API
 
-## Rodar app + API (recomendado para testar produção local)
-
-Terminal 1:
+## Rodar tudo local (recomendado)
 
 ```powershell
-cd c:\_PROJETOS\E-FISCAL\api
+cd c:\_PROJETOS\E-FISCAL
 npm install
-npm run dev
+copy app\.env.example app\.env
+cd api && npm install && copy .env.example .env && cd ..
+npm run dev:all
 ```
 
-Terminal 2:
+- App: http://127.0.0.1:5192  
+- API: http://127.0.0.1:8790/health  
+- Logins: `gestor@demo` / `fiscal@demo` — senha `demo123`  
+- Com `VITE_API_URL` no `app/.env`, login retorna **JWT** e dados ficam em `api/data/fisaval.json`.
+
+## PostGIS (fase 3)
 
 ```powershell
-cd c:\_PROJETOS\E-FISCAL\app
-copy .env.example .env
-npm install
-npm run dev
+docker compose up -d
 ```
 
-Abra http://127.0.0.1:5192 — login `gestor@demo` / `demo123`.
+Em `api/.env` descomente:
 
-Os dados ficam em `api/data/fisaval.json` (backup fácil).
+```env
+DATABASE_URL=postgres://fisaval:fisaval@localhost:5432/fisaval
+JWT_SECRET=um-segredo-forte
+```
 
-## GitHub Pages (só front)
+Reinicie a API — storage muda para `postgres+postgis`. Detalhes: [FASE3.md](FASE3.md).
 
-O site em https://rivascode-ops.github.io/FISAVAL/ continua **modo local** (IndexedDB no navegador), a menos que você hospede a API em um servidor com HTTPS e configure `VITE_API_URL` no build.
+## GitHub Pages (só front, modo offline local)
 
-## Próximo (fase 3)
+https://rivascode-ops.github.io/FISAVAL/
 
-- PostgreSQL + PostGIS (`docker-compose.yml`)
-- Fotos em S3/MinIO
-- JWT + HTTPS
-- Hospedar API (Render, Railway, VPS da prefeitura)
+- Ative **Settings → Pages → branch `gh-pages` → / (root)** se ainda der 404.
+- Sem API hospedada, cada navegador guarda dados no IndexedDB.
+
+## API na nuvem
+
+Ver [HOSPEDAR-API.md](HOSPEDAR-API.md).
+
+## Comandos úteis
+
+| Comando | Uso |
+|---------|-----|
+| `npm run dev:all` | API + app |
+| `npm run build:pages` | Build Pages em `docs/` |
+| `cd api && npm run build` | Compilar TypeScript da API |
