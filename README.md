@@ -18,10 +18,17 @@ Módulos: **Demandas + OS**, **Campo** (mapa, GPS, checklist, sync), **Painel** 
 ### API compartilhada (fase 2)
 
 ```powershell
-cd c:\_PROJETOS\E-FISCAL
+cd D:\PROJETOS\02_APPS\fisaval
 npm install
+cd app && npm install && cd ..
+cd api && npm install && cd ..
+copy app\.env.example app\.env
 npm run dev:all
 ```
+
+Ou execute **`INICIAR-FISAVAL.bat`** na raiz do projeto.
+
+**Piloto local:** `VITE_PILOTO_LOCAL=true` em `app/.env` — ver [docs/MODO-LOCAL-SOLO.md](docs/MODO-LOCAL-SOLO.md) e [TESTE-MANUAL.md](TESTE-MANUAL.md).
 
 Copie `app/.env.example` → `app/.env` (`VITE_API_URL=http://127.0.0.1:8790`). Detalhes: [docs/PRODUCAO.md](docs/PRODUCAO.md) · PostGIS/JWT/fotos: [docs/FASE3.md](docs/FASE3.md) · Fotos offline + Render: [docs/FASE4.md](docs/FASE4.md) · Rota + sync API: [docs/FASE5.md](docs/FASE5.md) · Mapa painel + deploy: [docs/FASE6.md](docs/FASE6.md) · API health + PG plain: [docs/FASE7.md](docs/FASE7.md) · CSV e relatório PDF: [docs/FASE8.md](docs/FASE8.md) · Export API + push: [docs/FASE9.md](docs/FASE9.md) · Auditoria + import CSV: [docs/FASE10.md](docs/FASE10.md) · Assinatura + tenant: [docs/FASE11.md](docs/FASE11.md) · Filtro tenant + laudo: [docs/FASE12.md](docs/FASE12.md) · Roteirização API/VROOM: [docs/FASE13.md](docs/FASE13.md) · Prazo, geofence e limite OS: [docs/FASE14.md](docs/FASE14.md) · Janela horária de visita: [docs/FASE15.md](docs/FASE15.md) · Tenant isolado + capacidade diária: [docs/FASE16.md](docs/FASE16.md) · Multi-tenant `X-Tenant-Id`: [docs/FASE17.md](docs/FASE17.md) · Tipo de vistoria + VROOM skills: [docs/FASE18.md](docs/FASE18.md) · API na nuvem: [docs/HOSPEDAR-API.md](docs/HOSPEDAR-API.md)
 

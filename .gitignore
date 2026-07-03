@@ -12,3 +12,12 @@ api/dist/
 api/data/
 !api/data/.gitkeep
 api/uploads/
+.next/
+dist/
+build/
+.venv/
+venv/
+__pycache__/
+*.pyc
+tsconfig.tsbuildinfo
+.vercel/

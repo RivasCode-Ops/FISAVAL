@@ -12,9 +12,12 @@ import {
   ordenarPorProximidade,
   type GeoPoint,
 } from './rota.js';
+import { countDemandasVencidas, ordensComPrazoAlerta } from './alertasPrazo.js';
+import { resolvePrazoVistoria } from './prazoStatus.js';
 import { filterDemandas, filterOrdens, matchesTenant } from './tenant.js';
 import { skillsForFiscal } from './tipoVistoria.js';
 import { ordenarComVroom } from './vroom.js';
+import { migratePrazoRecords } from './migratePrazo.js';
 import { buildTenantSeed } from './tenantSeed.js';
 import { vistoriaTemAssinatura } from './vistoriaAssinatura.js';
 import type { ImportRow } from './importCsv.js';
@@ -39,12 +42,20 @@ function empty(): DbShape {
   return { users: [], demandas: [], ordens: [], vistorias: [], fotos: [] };
 }
 
+function applyPrazoMigration(db: DbShape): DbShape {
+  const { demandas, ordens, changed } = migratePrazoRecords(db.demandas, db.ordens, db.vistorias);
+  if (!changed) return db;
+  return { ...db, demandas, ordens };
+}
+
 export function loadDb(): DbShape {
   const p = dbPath();
   if (!existsSync(p)) return empty();
   const raw = JSON.parse(readFileSync(p, 'utf8')) as DbShape;
   if (!raw.fotos) raw.fotos = [];
-  return raw;
+  const migrated = applyPrazoMigration(raw);
+  if (migrated !== raw) saveDb(migrated);
+  return migrated;
 }
 
 export function saveDb(db: DbShape) {
@@ -92,8 +103,11 @@ export const jsonRepo = {
   },
   async createDemanda(input: Omit<Demanda, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
     const t = now();
+    const prazoV = input.prazoVistoriaEm ?? input.prazo;
     const d: Demanda = {
       ...input,
+      prazo: input.prazo ?? prazoV,
+      prazoVistoriaEm: prazoV,
       tenantId: input.tenantId ?? getActiveTenantId(),
       id: uid('D'),
       status: 'aberta',
@@ -115,6 +129,7 @@ export const jsonRepo = {
           bairro: r.bairro,
           prioridade: r.prioridade,
           prazo: r.prazo,
+          prazoVistoriaEm: r.prazo,
           status: 'aberta',
           inscricao: r.inscricao,
           endereco: r.endereco,
@@ -149,6 +164,7 @@ export const jsonRepo = {
       if (visitas >= config.maxVisitasDiaFiscal) return null;
     }
     const t = now();
+    const prazoCampo = resolvePrazoVistoria(demanda)!;
     const os: OrdemServico = {
       id: uid('OS'),
       demandaId: demanda.id,
@@ -158,8 +174,11 @@ export const jsonRepo = {
       endereco: demanda.endereco ?? demanda.bairro,
       bairro: demanda.bairro,
       tipo: demanda.tipo,
+      finalidade: demanda.finalidade,
+      dadosReferencia: demanda.dadosReferencia,
       prioridade: demanda.prioridade,
-      prazo: demanda.prazo,
+      prazo: prazoCampo,
+      prazoCampoEm: prazoCampo,
       visitaInicio: janela?.visitaInicio,
       visitaFim: janela?.visitaFim,
       status: 'atribuida',
@@ -174,6 +193,7 @@ export const jsonRepo = {
       const dem = d.demandas.find((x) => x.id === demandaId);
       if (dem) {
         dem.status = 'os_gerada';
+        dem.dataInicioExecucaoEm = t;
         dem.updatedAt = t;
       }
     });
@@ -392,8 +412,10 @@ export const jsonRepo = {
   async getKpis() {
     const db = loadDb();
     const ordens = filterOrdens(db.ordens, db.demandas);
+    const demandas = filterDemandas(db.demandas);
     const osIds = new Set(ordens.map((o) => o.id));
     const hoje = now().slice(0, 10);
+    const vMap = new Map(db.vistorias.map((v) => [v.osId, v]));
     return {
       osHoje: ordens.filter((o) => o.createdAt.startsWith(hoje)).length || ordens.length,
       concluidas: ordens.filter((o) =>
@@ -402,10 +424,8 @@ export const jsonRepo = {
       homolog: ordens.filter((o) => o.status === 'homologacao').length,
       divergencias: db.vistorias.filter((v) => v.divergencia && osIds.has(v.osId)).length,
       visitasHoje: countVisitasHoje(db.ordens, db.vistorias),
-      prazoVencido: ordens.filter(
-        (o) =>
-          filtrarOsAtivas([o]).length > 0 && o.prazo && daysUntilPrazo(o.prazo) < 0,
-      ).length,
+      prazoVencido: ordensComPrazoAlerta(ordens, vMap).filter((o) => o.statusPrazo === 'VENCIDA').length,
+      demandasVencidas: countDemandasVencidas(demandas),
       fiscais: db.users.filter((u) => u.role === 'fiscal'),
     };
   },

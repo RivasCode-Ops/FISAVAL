@@ -100,6 +100,11 @@ export function mapsDirUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
+/** Abre o ponto no Google Maps (visualizar / buscar por coordenada). */
+export function mapsSearchUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
+
 /** Distância total (km) e tempo estimado (~35 km/h). */
 export function estimateRotaStats(
   ordens: OrdemServico[],

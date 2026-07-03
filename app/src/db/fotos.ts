@@ -15,7 +15,7 @@ export async function getFotoLocal(id: string): Promise<FotoLocal | undefined> {
   return db.fotos.get(id);
 }
 
-export async function saveFotoLocal(vistoriaId: string, file: File): Promise<FotoLocal> {
+export async function saveFotoLocal(vistoriaId: string, file: File, legenda?: string): Promise<FotoLocal> {
   const id = `F-${Date.now().toString(36)}`;
   const row: FotoLocal = {
     id,
@@ -24,6 +24,7 @@ export async function saveFotoLocal(vistoriaId: string, file: File): Promise<Fot
     mime: file.type || 'image/jpeg',
     sizeBytes: file.size,
     createdAt: new Date().toISOString(),
+    legenda,
     syncStatus: 'local',
     blob: file,
   };

@@ -11,6 +11,8 @@ import {
   ordenarPorPrazoEProximidade,
   type GeoPoint,
 } from './rota.js';
+import { countDemandasVencidas, ordensComPrazoAlerta } from './alertasPrazo.js';
+import { resolvePrazoVistoria } from './prazoStatus.js';
 import { matchesTenant } from './tenant.js';
 import { countVisitasHoje } from './fiscal.js';
 import { skillsForFiscal } from './tipoVistoria.js';
@@ -52,6 +54,8 @@ export async function initPgSchema() {
   await p.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS tipos_habilitados JSONB');
   await p.query('ALTER TABLE vistorias ADD COLUMN IF NOT EXISTS assinatura_modo TEXT');
   await p.query('ALTER TABLE vistorias ADD COLUMN IF NOT EXISTS assinatura_ref TEXT');
+  const prazoSql = readFileSync(join(__dir, '..', 'sql', '002_prazo_demanda.sql'), 'utf8');
+  await p.query(prazoSql);
 }
 
 type PgQuery = Pick<pg.Pool, 'query'>;
@@ -122,12 +126,18 @@ async function insertDemandaRowQ(
 const now = () => new Date().toISOString();
 
 function rowDemanda(r: Record<string, unknown>): Demanda {
+  const prazo = r.prazo as string;
+  const prazoVistoriaEm = (r.prazo_vistoria_em as string) ?? prazo;
   return {
     id: r.id as string,
     tipo: r.tipo as string,
     bairro: r.bairro as string,
     prioridade: r.prioridade as Prioridade,
-    prazo: r.prazo as string,
+    prazo,
+    prazoVistoriaEm,
+    dataInicioExecucaoEm: r.data_inicio_execucao_em
+      ? new Date(r.data_inicio_execucao_em as string).toISOString()
+      : undefined,
     status: r.status as Demanda['status'],
     inscricao: (r.inscricao as string) ?? undefined,
     endereco: (r.endereco as string) ?? undefined,
@@ -146,6 +156,8 @@ const tenantOrdemWhere = (tenantParam: string) => `EXISTS (
 )`;
 
 function rowOrdem(r: Record<string, unknown>): OrdemServico {
+  const prazo = (r.prazo as string) ?? undefined;
+  const prazoCampoEm = (r.prazo_campo_em as string) ?? prazo;
   return {
     id: r.id as string,
     demandaId: r.demanda_id as string,
@@ -156,7 +168,8 @@ function rowOrdem(r: Record<string, unknown>): OrdemServico {
     bairro: r.bairro as string,
     tipo: (r.tipo as string) ?? undefined,
     prioridade: (r.prioridade as Prioridade) ?? undefined,
-    prazo: (r.prazo as string) ?? undefined,
+    prazo,
+    prazoCampoEm,
     visitaInicio: (r.visita_inicio as string) ?? undefined,
     visitaFim: (r.visita_fim as string) ?? undefined,
     status: r.status as OsStatus,
@@ -436,6 +449,7 @@ export const pgRepo = {
       lng,
       createdAt: t,
     });
+    await getPool().query('UPDATE demandas SET prazo_vistoria_em = $2 WHERE id = $1', [id, input.prazo]);
     return rowDemanda(
       (
         await getPool().query('SELECT * FROM demandas WHERE id = $1', [id])
@@ -464,13 +478,14 @@ export const pgRepo = {
     }
     const t = now();
     const id = uid('OS');
+    const prazoCampo = resolvePrazoVistoria(demRow)!;
     const { rows: cnt } = await getPool().query(
       'SELECT COUNT(*)::int AS c FROM ordens WHERE fiscal_id = $1',
       [fiscalId],
     );
     await getPool().query(
-      `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, tipo, prioridade, prazo, visita_inicio, visita_fim, status, lat, lng, rota_ordem, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'atribuida',$13,$14,$15,$16,$16)`,
+      `INSERT INTO ordens (id, demanda_id, fiscal_id, fiscal_nome, inscricao, endereco, bairro, tipo, prioridade, prazo, prazo_campo_em, visita_inicio, visita_fim, status, lat, lng, rota_ordem, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10,$11,$12,'atribuida',$13,$14,$15,$16,$16)`,
       [
         id,
         demandaId,
@@ -481,7 +496,7 @@ export const pgRepo = {
         dem.bairro,
         demRow.tipo,
         demRow.prioridade,
-        demRow.prazo,
+        prazoCampo,
         janela?.visitaInicio ?? null,
         janela?.visitaFim ?? null,
         demRow.lat,
@@ -490,10 +505,10 @@ export const pgRepo = {
         t,
       ],
     );
-    await getPool().query(`UPDATE demandas SET status = 'os_gerada', updated_at = $2 WHERE id = $1`, [
-      demandaId,
-      t,
-    ]);
+    await getPool().query(
+      `UPDATE demandas SET status = 'os_gerada', data_inicio_execucao_em = $2, updated_at = $2 WHERE id = $1`,
+      [demandaId, t],
+    );
     const endereco = String(dem.endereco ?? dem.bairro);
     void import('./push.js').then((m) => m.notifyNewOs(fiscalId, id, endereco));
     return rowOrdem(
@@ -746,10 +761,12 @@ export const pgRepo = {
   },
   async getKpis() {
     const hoje = now().slice(0, 10);
-    const { rows: ordens } = await getPool().query(
-      `SELECT o.status, o.created_at, o.id, o.prazo FROM ordens o WHERE ${tenantOrdemWhere('$1')}`,
-      [getActiveTenantId()],
-    );
+    const [ordens, demandas, boot] = await Promise.all([
+      pgRepo.listOrdens(),
+      pgRepo.listDemandas(),
+      pgRepo.bootstrap(),
+    ]);
+    const vMap = new Map(boot.vistorias.map((v) => [v.osId, v]));
     const { rows: visitasRows } = await getPool().query(
       `SELECT COUNT(*)::int AS c FROM vistorias v
        JOIN ordens o ON o.id = v.os_id
@@ -765,23 +782,17 @@ export const pgRepo = {
     const { rows: fiscais } = await getPool().query(
       `SELECT id, email, nome, role, tipos_habilitados FROM users WHERE role = 'fiscal'`,
     );
-    const osHoje = ordens.filter((o) => String(o.created_at).startsWith(hoje)).length || ordens.length;
+    const osHoje = ordens.filter((o) => o.createdAt.startsWith(hoje)).length || ordens.length;
     return {
       osHoje,
       concluidas: ordens.filter((o) =>
-        ['concluida', 'homologacao', 'homologada', 'pendente_sync'].includes(o.status as string),
+        ['concluida', 'homologacao', 'homologada', 'pendente_sync'].includes(o.status),
       ).length,
       homolog: ordens.filter((o) => o.status === 'homologacao').length,
       divergencias: vistorias.filter((v) => v.divergencia).length,
       visitasHoje: visitasRows[0].c as number,
-      prazoVencido: ordens.filter(
-        (o) =>
-          ['atribuida', 'em_campo', 'check_in', 'em_vistoria', 'pendente_sync', 'interrompida'].includes(
-            o.status as string,
-          ) &&
-          o.prazo &&
-          daysUntilPrazo(String(o.prazo)) < 0,
-      ).length,
+      prazoVencido: ordensComPrazoAlerta(ordens, vMap).filter((o) => o.statusPrazo === 'VENCIDA').length,
+      demandasVencidas: countDemandasVencidas(demandas),
       fiscais: fiscais.map((r) => rowUser(r as Record<string, unknown>)),
     };
   },

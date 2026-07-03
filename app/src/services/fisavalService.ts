@@ -30,9 +30,17 @@ import {
   estimateRotaStats,
   filtrarOsAtivas,
   ordenarPorPrazoEProximidade,
-  prazoVencido,
   type GeoPoint,
 } from '@/lib/rota';
+import {
+  countDemandasVencidas,
+  countOrdensCampoVencidas,
+  listAlertasPrazoLocal,
+  type AlertasPrazoResult,
+  type DemandaPrazoAlerta,
+  type OrdemPrazoAlerta,
+} from '@/lib/alertasPrazo';
+import { resolvePrazoVistoria } from '@/lib/prazoStatus';
 
 export type OtimizarRotaResult = {
   paradas: number;
@@ -46,11 +54,19 @@ import { getApiUrl } from '@/api/config';
 import { useAuthStore } from '@/store/authStore';
 import { vistoriaTemAssinatura } from '@/lib/vistoriaAssinatura';
 import { buildFiscalCargaLocal, pickFiscalIdLocal } from '@/lib/sugerirFiscal';
-import { ordensComPrazoVencidoLocal, type OrdemPrazoAlerta } from '@/lib/alertasPrazo';
 import { fiscalHandlesTipo } from '@/lib/tipoVistoria';
+import {
+  CHECKLIST_COMUM,
+  checklistForFinalidade,
+  divergenciaFromResultado,
+  finalidadeFromTipo,
+  FINALIDADE_LABELS,
+  type FinalidadeVistoria,
+} from '@/lib/finalidadeVistoria';
 
-export type { OrdemPrazoAlerta };
-import type { Demanda, OrdemServico, OsStatus, Prioridade, User, Vistoria, VistoriaFoto } from '@/types';
+export { checklistForFinalidade };
+export type { AlertasPrazoResult, DemandaPrazoAlerta, OrdemPrazoAlerta };
+import type { Demanda, OrdemServico, OsStatus, Prioridade, ResultadoConferencia, User, Vistoria, VistoriaFoto } from '@/types';
 
 const now = () => new Date().toISOString();
 const uid = (p: string) => `${p}-${Date.now().toString(36)}`;
@@ -65,13 +81,8 @@ async function pushApi() {
   }
 }
 
-export const CHECKLIST_ITEMS = [
-  { id: 'uso', label: 'Uso conforme cadastro' },
-  { id: 'padrao', label: 'Padrão construtivo compatível' },
-  { id: 'conservacao', label: 'Conservação regular' },
-  { id: 'entorno', label: 'Infraestrutura do entorno OK' },
-  { id: 'divergencia', label: 'Divergência cadastral identificada' },
-] as const;
+/** @deprecated Use checklistForFinalidade — mantido para export/CSV legado (itens comuns). */
+export const CHECKLIST_ITEMS = CHECKLIST_COMUM;
 
 /** Baixa estado atual da API para o IndexedDB (gestor / multi-dispositivo). */
 export async function importDemandasCsvFile(file: File): Promise<{ created: number; errors: string[] }> {
@@ -101,6 +112,7 @@ export async function importDemandasCsvFile(file: File): Promise<{ created: numb
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     await createDemanda({
+      finalidade: finalidadeFromTipo(r.tipo),
       tipo: r.tipo,
       bairro: r.bairro,
       prioridade: r.prioridade,
@@ -144,7 +156,8 @@ export async function getVistoriaMapByOs(): Promise<Map<string, Vistoria>> {
 }
 
 export async function createDemanda(input: {
-  tipo: string;
+  finalidade: FinalidadeVistoria;
+  dadosReferencia?: Record<string, string>;
   bairro: string;
   prioridade: Prioridade;
   prazo: string;
@@ -152,18 +165,38 @@ export async function createDemanda(input: {
   inscricao?: string;
   lat?: number;
   lng?: number;
+  /** Legado CSV — se omitido, deriva de finalidade. */
+  tipo?: string;
 }) {
+  const tipo = input.tipo ?? FINALIDADE_LABELS[input.finalidade];
+  const prazoV = input.prazo;
+  const payload = {
+    tipo,
+    finalidade: input.finalidade,
+    dadosReferencia: input.dadosReferencia,
+    bairro: input.bairro,
+    prioridade: input.prioridade,
+    prazo: prazoV,
+    prazoVistoriaEm: prazoV,
+    endereco: input.endereco,
+    inscricao: input.inscricao,
+    lat: input.lat,
+    lng: input.lng,
+  };
   let d: Demanda;
   if (isApiMode() && navigator.onLine) {
-    d = await apiClient.createDemanda(input);
+    d = await apiClient.createDemanda(payload);
     await db.demandas.put(d);
   } else {
     d = {
       id: uid('D'),
-      tipo: input.tipo,
+      tipo,
+      finalidade: input.finalidade,
+      dadosReferencia: input.dadosReferencia,
       bairro: input.bairro,
       prioridade: input.prioridade,
-      prazo: input.prazo,
+      prazo: prazoV,
+      prazoVistoriaEm: prazoV,
       status: 'aberta',
       endereco: input.endereco,
       inscricao: input.inscricao,
@@ -190,7 +223,15 @@ export async function gerarOs(
       const os = await apiClient.gerarOs(demandaId, fiscalId, fiscalNome, janela);
       await db.ordens.put(os);
       const demanda = await db.demandas.get(demandaId);
-      if (demanda) await db.demandas.put({ ...demanda, status: 'os_gerada', updatedAt: now() });
+      if (demanda) {
+        const t = now();
+        await db.demandas.put({
+          ...demanda,
+          status: 'os_gerada',
+          dataInicioExecucaoEm: t,
+          updatedAt: t,
+        });
+      }
       return os;
     } catch (e) {
       throw e instanceof Error ? e : new Error('Não foi possível gerar a OS');
@@ -203,6 +244,8 @@ export async function gerarOs(
     throw new Error(`Fiscal não habilitado para o tipo "${demanda.tipo}"`);
   }
   const count = await db.ordens.where('fiscalId').equals(fiscalId).count();
+  const t = now();
+  const prazoCampo = resolvePrazoVistoria(demanda)!;
   const os: OrdemServico = {
     id: uid('OS'),
     demandaId,
@@ -212,20 +255,27 @@ export async function gerarOs(
     endereco: demanda.endereco ?? demanda.bairro,
     bairro: demanda.bairro,
     tipo: demanda.tipo,
+    finalidade: demanda.finalidade,
+    dadosReferencia: demanda.dadosReferencia,
     prioridade: demanda.prioridade,
-    prazo: demanda.prazo,
+    prazo: prazoCampo,
+    prazoCampoEm: prazoCampo,
     visitaInicio: janela?.visitaInicio,
     visitaFim: janela?.visitaFim,
     status: 'atribuida',
     lat: demanda.lat,
     lng: demanda.lng,
     rotaOrdem: count + 1,
-    createdAt: now(),
-    updatedAt: now(),
+    createdAt: t,
+    updatedAt: t,
   };
   await db.transaction('rw', db.demandas, db.ordens, async () => {
     await db.ordens.add(os);
-    await db.demandas.update(demandaId, { status: 'os_gerada', updatedAt: now() });
+    await db.demandas.update(demandaId, {
+      status: 'os_gerada',
+      dataInicioExecucaoEm: t,
+      updatedAt: t,
+    });
   });
   await pushApi();
   return os;
@@ -327,14 +377,31 @@ export async function getOrCreateVistoria(osId: string): Promise<Vistoria> {
 
 export async function saveVistoria(
   vistoriaId: string,
-  data: Partial<Pick<Vistoria, 'checklist' | 'divergencia' | 'justificativa' | 'checkInLat' | 'checkInLng' | 'checkInAt'>>,
+  data: Partial<
+    Pick<
+      Vistoria,
+      | 'checklist'
+      | 'divergencia'
+      | 'resultadoConferencia'
+      | 'observacaoConferencia'
+      | 'justificativa'
+      | 'checkInLat'
+      | 'checkInLng'
+      | 'checkInAt'
+      | 'checkInAccuracyM'
+    >
+  >,
 ) {
+  const patch = { ...data };
+  if (patch.resultadoConferencia !== undefined) {
+    patch.divergencia = divergenciaFromResultado(patch.resultadoConferencia);
+  }
   if (isApiMode() && navigator.onLine) {
-    const v = await apiClient.patchVistoria(vistoriaId, data);
+    const v = await apiClient.patchVistoria(vistoriaId, patch);
     await db.vistorias.put(v);
     return;
   }
-  await db.vistorias.update(vistoriaId, { ...data, updatedAt: now() });
+  await db.vistorias.update(vistoriaId, { ...patch, updatedAt: now() });
   await pushApi();
 }
 
@@ -374,6 +441,8 @@ export async function syncPendentes(fiscalId: string): Promise<number> {
         const synced = await apiClient.patchVistoria(v.id, {
           checklist: v.checklist,
           divergencia: v.divergencia,
+          resultadoConferencia: v.resultadoConferencia,
+          observacaoConferencia: v.observacaoConferencia,
           justificativa: v.justificativa,
           checkInLat: v.checkInLat,
           checkInLng: v.checkInLng,
@@ -500,7 +569,7 @@ export async function syncFotosPendentes(): Promise<number> {
   for (const f of await listFotosPendentes()) {
     try {
       const file = new File([f.blob], f.filename, { type: f.mime });
-      const remote = await apiUploadFoto(f.vistoriaId, file);
+      const remote = await apiUploadFoto(f.vistoriaId, file, f.legenda);
       await markFotoSynced(f, remote);
       n++;
     } catch {
@@ -547,6 +616,9 @@ export async function getKpis() {
         concluidas: k.concluidas,
         homolog: k.homolog,
         divergencias: k.divergencias,
+        visitasHoje: k.visitasHoje ?? 0,
+        prazoVencido: k.prazoVencido ?? 0,
+        demandasVencidas: k.demandasVencidas ?? 0,
         fiscais: k.fiscais as Awaited<ReturnType<typeof listFiscais>>,
       };
     } catch {
@@ -565,28 +637,39 @@ export async function getKpis() {
   const divergencias = vistorias.filter((v) => v.divergencia && osIds.has(v.osId)).length;
   const fiscais = await db.users.where('role').equals('fiscal').toArray();
   const visitasHoje = vistorias.filter((v) => osIds.has(v.osId) && v.concluidaAt?.startsWith(hoje)).length;
-  const prazoVencidoCount = filtrarOsAtivas(ordens).filter((o) => o.prazo && prazoVencido(o.prazo)).length;
+  const demandas = await db.demandas.toArray();
+  const vMap = new Map(vistorias.map((v) => [v.osId, v]));
   return {
     osHoje: osHoje || ordens.length,
     concluidas,
     homolog,
     divergencias,
     visitasHoje,
-    prazoVencido: prazoVencidoCount,
+    prazoVencido: countOrdensCampoVencidas(ordens, vMap),
+    demandasVencidas: countDemandasVencidas(filterDemandas(demandas)),
     fiscais,
   };
 }
 
-export async function listAlertasPrazoVencido(): Promise<OrdemPrazoAlerta[]> {
+export async function listAlertasPrazo(): Promise<AlertasPrazoResult> {
   if (isApiMode() && navigator.onLine) {
     try {
-      const r = await apiClient.alertasPrazoVencido();
-      return r.ordens;
+      return (await apiClient.alertasPrazoVencido()) as AlertasPrazoResult;
     } catch {
       /* Dexie */
     }
   }
-  return ordensComPrazoVencidoLocal(await listAllOrdens());
+  const demandas = await db.demandas.toArray();
+  const ordens = await listAllOrdens();
+  const vistorias = await db.vistorias.toArray();
+  const vMap = new Map(vistorias.map((v) => [v.osId, v]));
+  return listAlertasPrazoLocal(filterDemandas(demandas), ordens, vMap);
+}
+
+/** @deprecated Use listAlertasPrazo */
+export async function listAlertasPrazoVencido(): Promise<OrdemPrazoAlerta[]> {
+  const r = await listAlertasPrazo();
+  return r.ordens;
 }
 
 export async function sugerirFiscalParaTipo(tipo: string): Promise<string | null> {
@@ -660,11 +743,15 @@ export async function listFotos(vistoriaId: string): Promise<VistoriaFoto[]> {
   return localMeta;
 }
 
-export async function uploadFoto(vistoriaId: string, file: File): Promise<VistoriaFoto | null> {
-  const local = await saveFotoLocal(vistoriaId, file);
+export async function uploadFoto(
+  vistoriaId: string,
+  file: File,
+  legenda?: string,
+): Promise<VistoriaFoto | null> {
+  const local = await saveFotoLocal(vistoriaId, file, legenda);
   if (isApiMode() && navigator.onLine) {
     try {
-      const remote = await apiUploadFoto(vistoriaId, file);
+      const remote = await apiUploadFoto(vistoriaId, file, legenda);
       await markFotoSynced(local, remote);
       return remote;
     } catch {

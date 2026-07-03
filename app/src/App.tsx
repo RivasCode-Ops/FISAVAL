@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { RequireAuth } from '@/components/RequireAuth';
+import { RequireRole } from '@/components/RequireRole';
+import { AdminPage } from '@/pages/AdminPage';
 import { CampoPage } from '@/pages/CampoPage';
 import { DemandasPage } from '@/pages/DemandasPage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
@@ -20,11 +22,20 @@ export function App() {
         <Route element={<RequireAuth />}>
           <Route element={<Layout />}>
             <Route index element={<HomeRedirect />} />
-            <Route path="painel" element={<PainelPage />} />
-            <Route path="demandas" element={<DemandasPage />} />
-            <Route path="auditoria" element={<AuditoriaPage />} />
-            <Route path="super" element={<SuperPainelPage />} />
-            <Route path="campo" element={<CampoPage />} />
+            <Route element={<RequireRole allow={['gestor', 'admin']} fallback="/campo" />}>
+              <Route path="painel" element={<PainelPage />} />
+              <Route path="demandas" element={<DemandasPage />} />
+            </Route>
+            <Route element={<RequireRole allow={['fiscal']} fallback="/painel" />}>
+              <Route path="campo" element={<CampoPage />} />
+            </Route>
+            <Route element={<RequireRole allow={['admin']} fallback="/painel" />}>
+              <Route path="auditoria" element={<AuditoriaPage />} />
+              <Route path="admin" element={<AdminPage />} />
+            </Route>
+            <Route element={<RequireRole allow="superAdmin" fallback="/painel" />}>
+              <Route path="super" element={<SuperPainelPage />} />
+            </Route>
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

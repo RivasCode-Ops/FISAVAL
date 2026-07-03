@@ -72,11 +72,16 @@ export async function apiPushState() {
   });
 }
 
-export async function apiUploadFoto(vistoriaId: string, file: File): Promise<VistoriaFoto> {
+export async function apiUploadFoto(
+  vistoriaId: string,
+  file: File,
+  legenda?: string,
+): Promise<VistoriaFoto> {
   const base = getApiUrl();
   if (!base) throw new Error('API não configurada');
   const fd = new FormData();
   fd.append('file', file);
+  if (legenda) fd.append('legenda', legenda);
   const token = useAuthStore.getState().token;
   const res = await fetch(`${base}/api/fisaval/vistorias/${vistoriaId}/fotos`, {
     method: 'POST',
@@ -241,7 +246,19 @@ export const apiClient = {
   alertasPrazoVencido: () =>
     api<{
       count: number;
+      countDemandas: number;
       generatedAt: string;
+      demandas: {
+        id: string;
+        finalidade?: string;
+        bairro: string;
+        prazo: string;
+        diasAtraso: number;
+        diasRestantes: number;
+        statusPrazo: string;
+        labelCurto: string;
+        status: string;
+      }[];
       ordens: {
         id: string;
         fiscalNome: string;
@@ -250,6 +267,9 @@ export const apiClient = {
         tipo?: string;
         prazo: string;
         diasAtraso: number;
+        diasRestantes: number;
+        statusPrazo: string;
+        labelCurto: string;
         status: string;
       }[];
     }>('/alertas/prazo-vencido'),
@@ -261,6 +281,7 @@ export const apiClient = {
       divergencias: number;
       visitasHoje: number;
       prazoVencido: number;
+      demandasVencidas: number;
       fiscais: User[];
     }>('/kpis'),
 };

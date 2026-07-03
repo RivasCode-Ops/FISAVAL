@@ -6,30 +6,38 @@ import { useInterval } from '@/hooks/useInterval';
 import { useOnline } from '@/hooks/useOnline';
 import type { OrdemServico, OsStatus, Vistoria } from '@/types';
 import { PAINEL_MAP_LEGEND, PainelMap } from '@/components/PainelMap';
+import { PageHeader } from '@/components/PageHeader';
+import { SectionCard } from '@/components/SectionCard';
 import {
+  buildLaudoHtml,
+  type LaudoFotoItem,
   buildOrdensCsvRows,
+  buildRelatorioHtml,
   downloadCsv,
-  printHomologacaoLaudo,
-  printRelatorio,
 } from '@/lib/export';
+import { PrintPreviewModal } from '@/components/PrintPreviewModal';
 import { getRuntimeTenantId } from '@/lib/tenantFilter';
-import { labelAssinaturaModo } from '@/lib/vistoriaAssinatura';
-import { labelTiposHabilitados, TIPOS_VISTORIA } from '@/lib/tipoVistoria';
+import { fiscalHandlesTipo, TIPOS_VISTORIA } from '@/lib/tipoVistoria';
+import { checklistForFinalidade, labelFinalidade, resolveFinalidade } from '@/lib/finalidadeVistoria';
 import {
-  CHECKLIST_ITEMS,
   getKpis,
-  listAlertasPrazoVencido,
+  gerarOs,
+  listAlertasPrazo,
+  type DemandaPrazoAlerta,
   type OrdemPrazoAlerta,
   getAssinaturaDisplayUrl,
+  getFotoDisplayUrl,
   getVistoriaForOs,
   getVistoriaMapByOs,
   homologar,
   listAllOrdens,
+  listFotos,
   otimizarRotaFiscal,
   refreshFromServer,
-  updateFiscalTipos,
+  sugerirFiscalParaTipo,
 } from '@/services/fisavalService';
 import type { User } from '@/types';
+import { PILOTO_LOCAL } from '@/lib/pilotoLocal';
 
 const STATUS_OPTS: { value: string; label: string }[] = [
   { value: 'all', label: 'Todos os status' },
@@ -48,9 +56,9 @@ export function PainelPage() {
     divergencias: 0,
     visitasHoje: 0,
     prazoVencido: 0,
+    demandasVencidas: 0,
     fiscais: [] as { nome: string; id: string; tiposHabilitados?: string[] }[],
   });
-  const [habilitacoesMsg, setHabilitacoesMsg] = useState('');
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [homologQueue, setHomologQueue] = useState<OrdemServico[]>([]);
   const [vistorias, setVistorias] = useState<Record<string, Vistoria>>({});
@@ -61,9 +69,12 @@ export function PainelPage() {
   const [assinaturaUrls, setAssinaturaUrls] = useState<Record<string, string>>({});
   const [rotaFiscalId, setRotaFiscalId] = useState('');
   const [rotaGestorMsg, setRotaGestorMsg] = useState('');
+  const [alertasDemandas, setAlertasDemandas] = useState<DemandaPrazoAlerta[]>([]);
   const [alertasPrazo, setAlertasPrazo] = useState<OrdemPrazoAlerta[]>([]);
   const [pushPrazoMsg, setPushPrazoMsg] = useState('');
+  const [gerarOsMsg, setGerarOsMsg] = useState('');
   const [smtpEnabled, setSmtpEnabled] = useState(false);
+  const [printPreview, setPrintPreview] = useState<{ title: string; html: string } | null>(null);
   const online = useOnline();
 
   useEffect(() => {
@@ -84,6 +95,7 @@ export function PainelPage() {
       divergencias: k.divergencias,
       visitasHoje: k.visitasHoje ?? 0,
       prazoVencido: k.prazoVencido ?? 0,
+      demandasVencidas: k.demandasVencidas ?? 0,
       fiscais: k.fiscais.map((f) => ({
         id: f.id,
         nome: f.nome,
@@ -92,8 +104,16 @@ export function PainelPage() {
     });
     const all = await listAllOrdens();
     setOrdens(all);
-    setAlertasPrazo(await listAlertasPrazoVencido());
-    const queue = all.filter((o) => o.status === 'homologacao');
+    const alertas = await listAlertasPrazo();
+    setAlertasDemandas(alertas.demandas);
+    setAlertasPrazo(alertas.ordens);
+    const laudoStatuses: OsStatus[] = ['homologacao', 'pendente_sync'];
+    const queue: OrdemServico[] = [];
+    for (const o of all) {
+      if (!laudoStatuses.includes(o.status)) continue;
+      const v = await getVistoriaForOs(o.id);
+      if (v?.concluidaAt) queue.push(o);
+    }
     setHomologQueue(queue);
     const vs: Record<string, Vistoria> = {};
     for (const o of queue) {
@@ -141,6 +161,24 @@ export function PainelPage() {
     downloadCsv(`fisaval-os-${suffix}-${stamp}.csv`, buildOrdensCsvRows(lista, vMap));
   }
 
+  async function onGerarOsDemanda(d: DemandaPrazoAlerta) {
+    const tipo = d.tipo ?? d.finalidade ?? '';
+    const habilitados = kpis.fiscais.filter((f) => fiscalHandlesTipo(f.tiposHabilitados, tipo));
+    if (habilitados.length === 0) {
+      setGerarOsMsg(`Nenhum fiscal habilitado para "${tipo}".`);
+      return;
+    }
+    const sugeridoId = await sugerirFiscalParaTipo(tipo);
+    const fiscal = habilitados.find((f) => f.id === sugeridoId) ?? habilitados[0];
+    try {
+      await gerarOs(d.id, fiscal.id, fiscal.nome);
+      setGerarOsMsg(`OS gerada para ${fiscal.nome} (${d.id}).`);
+      await reload();
+    } catch (e) {
+      setGerarOsMsg(e instanceof Error ? e.message : 'Não foi possível gerar a OS.');
+    }
+  }
+
   async function otimizarRotaGestor() {
     if (!rotaFiscalId) {
       setRotaGestorMsg('Selecione um fiscal.');
@@ -163,51 +201,131 @@ export function PainelPage() {
     await reload();
   }
 
-  async function imprimirRelatorio() {
+  async function verRelatorio() {
     const vMap = await getVistoriaMapByOs();
-    printRelatorio({
-      geradoEm: new Date().toLocaleString('pt-BR'),
-      kpis: {
-        osHoje: kpis.osHoje,
-        concluidas: kpis.concluidas,
-        homolog: kpis.homolog,
-        divergencias: kpis.divergencias,
-      },
-      ordens,
-      homologQueue,
-      vistoriaByOs: vMap,
+    setPrintPreview({
+      title: 'Relatório operacional',
+      html: buildRelatorioHtml({
+        geradoEm: new Date().toLocaleString('pt-BR'),
+        kpis: {
+          osHoje: kpis.osHoje,
+          concluidas: kpis.concluidas,
+          homolog: kpis.homolog,
+          divergencias: kpis.divergencias,
+        },
+        ordens,
+        homologQueue,
+        vistoriaByOs: vMap,
+      }),
+    });
+  }
+
+  async function verLaudo(o: OrdemServico, v: Vistoria) {
+    const fin = resolveFinalidade(o);
+    const fotoList = await listFotos(v.id);
+    const fotos: LaudoFotoItem[] = [];
+    for (const f of fotoList) {
+      const url = await getFotoDisplayUrl(f.id);
+      fotos.push({ ...f, url: url ?? undefined });
+    }
+    setPrintPreview({
+      title: `Laudo ${o.id}`,
+      html: buildLaudoHtml({
+        os: o,
+        vistoria: v,
+        finalidade: fin,
+        dadosReferencia: o.dadosReferencia,
+        assinaturaUrl: assinaturaUrls[o.id],
+        tenantId: getRuntimeTenantId() || undefined,
+        geradoEm: new Date().toLocaleString('pt-BR'),
+        fotos,
+      }),
     });
   }
 
   return (
     <>
-      {alertasPrazo.length > 0 && (
-        <div
-          className="card"
-          style={{
-            marginBottom: '1rem',
-            borderColor: 'var(--danger, #c44)',
-            background: 'rgba(200, 60, 60, 0.06)',
-          }}
+      <PrintPreviewModal
+        open={!!printPreview}
+        title={printPreview?.title ?? ''}
+        html={printPreview?.html ?? ''}
+        onClose={() => setPrintPreview(null)}
+      />
+
+      <PageHeader
+        title="Painel operacional"
+        description="Homologação de laudos, indicadores e mapa — decisão sobre o que foi constatado em campo."
+      />
+
+      {alertasDemandas.length > 0 && (
+        <SectionCard
+          title={`Demandas sem OS — prazo (${alertasDemandas.length})`}
+          className="card--danger"
         >
-          <h2 style={{ margin: '0 0 0.5rem', fontSize: '1rem', color: 'var(--danger, #c44)' }}>
-            OS com prazo vencido ({alertasPrazo.length})
-          </h2>
-          <table style={{ fontSize: '0.85rem' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Demanda</th>
+                <th>Finalidade</th>
+                <th>Bairro</th>
+                <th>Prazo</th>
+                <th>Situação</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alertasDemandas.map((d) => {
+                const tipo = d.tipo ?? d.finalidade ?? '';
+                const temFiscal = kpis.fiscais.some((f) => fiscalHandlesTipo(f.tiposHabilitados, tipo));
+                return (
+                <tr key={d.id}>
+                  <td>{d.id}</td>
+                  <td>{d.finalidade ?? '—'}</td>
+                  <td>{d.bairro}</td>
+                  <td>{d.prazo}</td>
+                  <td>
+                    <span className={`badge ${d.statusPrazo === 'VENCIDA' ? 'b-pri-alta' : 'b-pri-media'}`}>
+                      {d.labelCurto}
+                    </span>
+                  </td>
+                  <td>
+                    {temFiscal ? (
+                      <button type="button" className="btn btn-sm" onClick={() => void onGerarOsDemanda(d)}>
+                        Gerar OS
+                      </button>
+                    ) : (
+                      <span className="muted">Sem fiscal</span>
+                    )}
+                  </td>
+                </tr>
+              );})}
+            </tbody>
+          </table>
+          {gerarOsMsg && <p className="muted">{gerarOsMsg}</p>}
+          <p className="muted">Gere a OS aqui ou em Demandas antes do prazo de vistoria.</p>
+        </SectionCard>
+      )}
+
+      {alertasPrazo.length > 0 && (
+        <SectionCard
+          title={`OS sem check-in — prazo de campo (${alertasPrazo.length})`}
+          className="card--danger"
+        >
+          <table>
             <thead>
               <tr>
                 <th>OS</th>
                 <th>Fiscal</th>
                 <th>Endereço</th>
                 <th>Prazo</th>
-                <th>Atraso</th>
+                <th>Situação</th>
               </tr>
             </thead>
             <tbody>
               {alertasPrazo.map((o) => (
                 <tr
                   key={o.id}
-                  style={{ cursor: 'pointer' }}
+                  className="row-clickable"
                   onClick={() => setDestaqueId(o.id)}
                   onKeyDown={(e) => e.key === 'Enter' && setDestaqueId(o.id)}
                   tabIndex={0}
@@ -216,19 +334,20 @@ export function PainelPage() {
                   <td>{o.fiscalNome}</td>
                   <td>{o.endereco}</td>
                   <td>{o.prazo}</td>
-                  <td>{o.diasAtraso} dia(s)</td>
+                  <td>
+                    <span className={`badge ${o.statusPrazo === 'VENCIDA' ? 'b-pri-alta' : 'b-pri-media'}`}>
+                      {o.labelCurto}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
-            Clique na linha para destacar no mapa.
-          </p>
-          {isApiMode() && online && (
+          <p className="muted">Clique na linha para destacar no mapa.</p>
+          {!PILOTO_LOCAL && isApiMode() && online && (
             <button
               type="button"
               className="btn btn-sm btn-outline"
-              style={{ marginTop: '0.5rem' }}
               onClick={() => {
                 void subscribeWebPush(['prazo_vencido']).then((r) => {
                   const labels: Record<string, string> = {
@@ -245,161 +364,197 @@ export function PainelPage() {
               Ativar notificação push (prazo)
             </button>
           )}
-          {pushPrazoMsg && (
-            <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--ok)' }}>{pushPrazoMsg}</p>
+          {pushPrazoMsg && <p className="text-ok">{pushPrazoMsg}</p>}
+          {!PILOTO_LOCAL && smtpEnabled && (
+            <p className="muted">E-mail automático ativo (gestores/admins do tenant + ALERTA_EMAIL_TO).</p>
           )}
-          {smtpEnabled && (
-            <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
-              E-mail automático ativo (gestores/admins do tenant + ALERTA_EMAIL_TO).
-            </p>
-          )}
-        </div>
+        </SectionCard>
       )}
 
       <div className="kpi-grid">
-        <div className="kpi">
+        <div className="kpi kpi--accent">
           <strong>{kpis.osHoje}</strong>OS (ref.)
         </div>
         <div className="kpi">
           <strong>{kpis.concluidas}</strong>Em fluxo / ok
         </div>
-        <div className="kpi">
+        <div className="kpi kpi--purple">
           <strong>{kpis.homolog}</strong>Homolog. pend.
         </div>
-        <div className="kpi">
+        <div className="kpi kpi--danger">
           <strong>{kpis.divergencias}</strong>Divergências
         </div>
         <div className="kpi">
           <strong>{kpis.visitasHoje}</strong>Visitas hoje
         </div>
-        <div className="kpi">
-          <strong>{kpis.prazoVencido}</strong>Prazo vencido
+        <div className="kpi kpi--warn">
+          <strong>{kpis.demandasVencidas}</strong>Dem. vencidas
+        </div>
+        <div className="kpi kpi--warn">
+          <strong>{kpis.prazoVencido}</strong>OS campo venc.
         </div>
       </div>
 
-      <div className="card">
-        <h2 style={{ margin: '0 0 0.75rem' }}>Habilitações por fiscal</h2>
-        <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
-          Define quais tipos de vistoria cada fiscal pode receber (skills VROOM na roteirização). Vazio = todos.
-        </p>
-        {kpis.fiscais.map((f) => (
-          <div key={f.id} style={{ marginBottom: '0.75rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.35rem' }}>
-              {f.nome}{' '}
-              <span style={{ fontWeight: 400, color: 'var(--muted)', fontSize: '0.8rem' }}>
-                ({labelTiposHabilitados(f.tiposHabilitados)})
-              </span>
-            </strong>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem' }}>
-              {TIPOS_VISTORIA.map((tipo) => {
-                const todos = !f.tiposHabilitados?.length;
-                const checked = todos || f.tiposHabilitados!.includes(tipo);
-                return (
-                  <label key={tipo} style={{ fontSize: '0.85rem', display: 'flex', gap: '0.35rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        const base = f.tiposHabilitados?.length
-                          ? [...f.tiposHabilitados!]
-                          : [...TIPOS_VISTORIA];
-                        const next = e.target.checked
-                          ? [...new Set([...base, tipo])]
-                          : base.filter((t) => t !== tipo);
-                        void updateFiscalTipos(f.id, next).then(() => {
-                          setHabilitacoesMsg(`${f.nome}: ${labelTiposHabilitados(next.length ? next : undefined)}`);
-                          void reload();
-                        });
-                      }}
-                    />
-                    {tipo}
-                  </label>
-                );
-              })}
-              <button
-                type="button"
-                className="btn btn-sm btn-outline"
-                onClick={() => {
-                  void updateFiscalTipos(f.id, []).then(() => {
-                    setHabilitacoesMsg(`${f.nome}: todos os tipos`);
-                    void reload();
-                  });
-                }}
-              >
-                Todos
-              </button>
+      <div className="painel-dashboard">
+        <SectionCard
+          id="homologacao"
+          title="Homologação cadastral — laudos"
+          subtitle="Vistorias concluídas aguardando laudo ou homologação."
+        >
+          {homologQueue.length === 0 ? (
+            <div className="muted stack stack--sm">
+              <p>Nenhuma vistoria concluída aguardando laudo.</p>
+              <ol>
+                <li>Fiscal: concluir vistoria em <strong>Campo</strong> (assinatura obrigatória).</li>
+                <li>A OS aparece aqui com status <em>pendente sync</em> ou <em>homologação</em>.</li>
+                <li>Clique <strong>Ver laudo</strong> → depois <strong>Imprimir / Salvar PDF</strong>.</li>
+              </ol>
             </div>
-          </div>
-        ))}
-        {habilitacoesMsg && (
-          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--ok)' }}>{habilitacoesMsg}</p>
-        )}
-      </div>
-
-      <div className="card export-bar">
-        <h2 style={{ margin: '0 0 0.5rem' }}>Roteirização</h2>
-        <div className="export-actions" style={{ marginBottom: '1rem' }}>
-          <select
-            className="input"
-            style={{ maxWidth: '220px' }}
-            value={rotaFiscalId}
-            onChange={(e) => setRotaFiscalId(e.target.value)}
-          >
-            <option value="">Fiscal…</option>
-            {kpis.fiscais.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nome}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="btn btn-sm" onClick={() => void otimizarRotaGestor()}>
-            Otimizar rota do fiscal
-          </button>
-        </div>
-        {rotaGestorMsg && (
-          <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>{rotaGestorMsg}</p>
-        )}
-        <h2 style={{ margin: '0 0 0.5rem' }}>Relatórios</h2>
-        <div className="export-actions">
-          <button type="button" className="btn btn-sm btn-outline" onClick={() => void exportCsv(ordensMapa, 'filtro')}>
-            CSV — OS do filtro ({ordensMapa.length})
-          </button>
-          <button type="button" className="btn btn-sm btn-outline" onClick={() => void exportCsv(ordens, 'todas')}>
-            CSV — todas as OS ({ordens.length})
-          </button>
-          <button type="button" className="btn btn-sm" onClick={() => void imprimirRelatorio()}>
-            Imprimir / salvar PDF
-          </button>
-          {isApiMode() && (
-            <>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline"
-                onClick={() =>
-                  void downloadAuthenticatedCsv('/export/ordens.csv', `fisaval-ordens-servidor.csv`)
-                }
-              >
-                CSV servidor (OS)
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline"
-                onClick={() =>
-                  void downloadAuthenticatedCsv('/export/demandas.csv', `fisaval-demandas-servidor.csv`)
-                }
-              >
-                CSV servidor (demandas)
-              </button>
-            </>
+          ) : (
+            homologQueue.map((o) => {
+              const v = vistorias[o.id];
+              const fin = resolveFinalidade(o);
+              const checks = v
+                ? checklistForFinalidade(fin).filter((c) => v.checklist[c.id]).map((c) => c.label)
+                : [];
+              return (
+                <div key={o.id} className="homolog-item">
+                  <strong>{o.id}</strong> — {o.inscricao}
+                  <br />
+                  <span className="badge b-status">{labelFinalidade(o.finalidade ?? o.tipo)}</span>{' '}
+                  <span className="badge b-status">{o.status}</span>
+                  <br />
+                  <small>
+                    {o.endereco} · {o.fiscalNome}
+                  </small>
+                  {v && (
+                    <p className="muted">
+                      {v.divergencia ? (
+                        <span className="badge b-pri-alta">Divergência</span>
+                      ) : (
+                        <span className="badge b-pri-baixa">Sem divergência</span>
+                      )}
+                      {checks.length > 0 && ` · ${checks.length} itens OK`}
+                      {v.concluidaAt && ` · ${new Date(v.concluidaAt).toLocaleString('pt-BR')}`}
+                      {v.assinaturaNome && ` · Ass.: ${v.assinaturaNome}`}
+                    </p>
+                  )}
+                  {assinaturaUrls[o.id] && (
+                    <img src={assinaturaUrls[o.id]} alt="Assinatura fiscal" className="assinatura-preview" />
+                  )}
+                  <div className="cluster">
+                    {v && (
+                      <button type="button" className="btn btn-sm" onClick={() => void verLaudo(o, v)}>
+                        Ver laudo
+                      </button>
+                    )}
+                    {o.status === 'homologacao' && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ok"
+                          onClick={() => void homologar(o.id, true).then(reload)}
+                        >
+                          Aprovar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          onClick={() => void homologar(o.id, false).then(reload)}
+                        >
+                          Devolver
+                        </button>
+                      </>
+                    )}
+                    {o.status === 'pendente_sync' && (
+                      <span className="muted">Fiscal pode sincronizar para mover para homologação.</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
-        </div>
-        <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
-          CSV abre no Excel (separador ;). PDF: use &quot;Salvar como PDF&quot; na janela de impressão.
-        </p>
+        </SectionCard>
+
+        <SectionCard
+          title={PILOTO_LOCAL ? 'Laudo e relatórios' : 'Relatórios'}
+          subtitle={
+            PILOTO_LOCAL
+              ? 'Visualização na tela — sem pop-up bloqueado.'
+              : 'CSV e PDF operacional.'
+          }
+          highlight
+          className="export-bar"
+        >
+          {!PILOTO_LOCAL && (
+            <div className="stack stack--sm">
+              <p className="section-card__subtitle">Roteirização</p>
+              <div className="export-actions cluster">
+                <select value={rotaFiscalId} onChange={(e) => setRotaFiscalId(e.target.value)}>
+                  <option value="">Fiscal…</option>
+                  {kpis.fiscais.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-sm" onClick={() => void otimizarRotaGestor()}>
+                  Otimizar rota do fiscal
+                </button>
+              </div>
+              {rotaGestorMsg && <p className="muted">{rotaGestorMsg}</p>}
+            </div>
+          )}
+          <div className="export-actions cluster">
+            {!PILOTO_LOCAL && (
+              <>
+                <button type="button" className="btn btn-sm btn-outline" onClick={() => void exportCsv(ordensMapa, 'filtro')}>
+                  CSV — OS do filtro ({ordensMapa.length})
+                </button>
+                <button type="button" className="btn btn-sm btn-outline" onClick={() => void exportCsv(ordens, 'todas')}>
+                  CSV — todas as OS ({ordens.length})
+                </button>
+              </>
+            )}
+            <button type="button" className="btn btn-sm" onClick={() => void verRelatorio()}>
+              {PILOTO_LOCAL ? 'Ver relatório operacional' : 'Imprimir / salvar PDF'}
+            </button>
+            {!PILOTO_LOCAL && isApiMode() && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => void downloadAuthenticatedCsv('/export/ordens.csv', `fisaval-ordens-servidor.csv`)}
+                >
+                  CSV servidor (OS)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => void downloadAuthenticatedCsv('/export/demandas.csv', `fisaval-demandas-servidor.csv`)}
+                >
+                  CSV servidor (demandas)
+                </button>
+              </>
+            )}
+          </div>
+          {PILOTO_LOCAL && (
+            <p className="muted">
+              O relatório abre <strong>na própria tela</strong>. Use <strong>Imprimir / Salvar PDF</strong> no topo.
+              {homologQueue.length === 0
+                ? ' Laudos por OS aparecem em Homologação quando o fiscal concluir a vistoria.'
+                : ` ${homologQueue.length} laudo(s) disponível(is) ao lado.`}
+            </p>
+          )}
+          <p className="muted">
+            {PILOTO_LOCAL
+              ? 'PDF: botão Imprimir / Salvar PDF dentro da visualização.'
+              : 'CSV abre no Excel (;). PDF: Salvar como PDF na impressão.'}
+          </p>
+        </SectionCard>
       </div>
 
-      <div className="card">
-        <h2>Mapa operacional</h2>
+      <SectionCard title="Mapa operacional">
         <div className="map-filters">
           <label>
             Status
@@ -433,9 +588,7 @@ export function PainelPage() {
               ))}
             </select>
           </label>
-          <span className="map-filters-count">
-            {ordensMapa.length} OS no mapa
-          </span>
+          <span className="map-filters-count">{ordensMapa.length} OS no mapa</span>
         </div>
         <PainelMap
           ordens={ordensMapa}
@@ -450,122 +603,15 @@ export function PainelPage() {
             </li>
           ))}
         </ul>
-      </div>
+      </SectionCard>
 
-      <div className="grid2">
-        <div className="card">
-          <h2>Fiscais</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Nome</th>
-                <th>ID</th>
-              </tr>
-            </thead>
-            <tbody>
-              {kpis.fiscais.map((f) => (
-                <tr key={f.id}>
-                  <td>{f.nome}</td>
-                  <td>{f.id}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="card">
-          <h2>Homologação cadastral</h2>
-          {homologQueue.length === 0 ? (
-            <p style={{ color: 'var(--muted)' }}>Nenhuma vistoria aguardando.</p>
-          ) : (
-            homologQueue.map((o) => {
-              const v = vistorias[o.id];
-              const checks = v
-                ? CHECKLIST_ITEMS.filter((c) => v.checklist[c.id]).map((c) => c.label)
-                : [];
-              return (
-                <div
-                  key={o.id}
-                  style={{
-                    marginBottom: '0.75rem',
-                    paddingBottom: '0.75rem',
-                    borderBottom: '1px solid var(--border)',
-                  }}
-                >
-                  <strong>{o.id}</strong> — {o.inscricao}
-                  <br />
-                  <small>
-                    {o.endereco} · {o.fiscalNome}
-                    {o.visitaInicio && o.visitaFim ? ` · ${o.visitaInicio}–${o.visitaFim}` : ''}
-                  </small>
-                  {v && (
-                    <p style={{ fontSize: '0.85rem', margin: '0.35rem 0', color: 'var(--muted)' }}>
-                      {v.divergencia ? (
-                        <span className="badge b-pri-alta">Divergência</span>
-                      ) : (
-                        <span className="badge b-pri-baixa">Sem divergência</span>
-                      )}
-                      {checks.length > 0 && ` · ${checks.length} itens OK`}
-                    {v.concluidaAt && ` · ${new Date(v.concluidaAt).toLocaleString('pt-BR')}`}
-                    {v.assinaturaNome && ` · Ass.: ${v.assinaturaNome}`}
-                    {(v.assinaturaModo === 'icp' || v.assinaturaModo === 'govbr') &&
-                      ` · ${labelAssinaturaModo(v)}`}
-                  </p>
-                )}
-                {assinaturaUrls[o.id] && (
-                  <img
-                    src={assinaturaUrls[o.id]}
-                    alt="Assinatura fiscal"
-                    className="assinatura-preview"
-                    style={{ marginTop: '0.35rem' }}
-                  />
-                )}
-                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {v && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline"
-                        onClick={() =>
-                          printHomologacaoLaudo({
-                            os: o,
-                            vistoria: v,
-                            assinaturaUrl: assinaturaUrls[o.id],
-                            tenantId: getRuntimeTenantId() || undefined,
-                            geradoEm: new Date().toLocaleString('pt-BR'),
-                          })
-                        }
-                      >
-                        Imprimir laudo
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-ok"
-                      onClick={() => void homologar(o.id, true).then(reload)}
-                    >
-                      Aprovar
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline"
-                      onClick={() => void homologar(o.id, false).then(reload)}
-                    >
-                      Devolver
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>Todas as ordens de serviço</h2>
+      <details className="card details-card">
+        <summary>Todas as ordens de serviço ({ordens.length})</summary>
         <table>
           <thead>
             <tr>
               <th>OS</th>
+              <th>Finalidade</th>
               <th>Fiscal</th>
               <th>Bairro</th>
               <th>Status</th>
@@ -575,11 +621,11 @@ export function PainelPage() {
             {ordens.map((o) => (
               <tr
                 key={o.id}
-                className={destaqueId === o.id ? 'row-highlight' : undefined}
+                className={`row-clickable${destaqueId === o.id ? ' row-highlight' : ''}`}
                 onClick={() => setDestaqueId(o.id)}
-                style={{ cursor: 'pointer' }}
               >
                 <td>{o.id}</td>
+                <td>{labelFinalidade(o.finalidade ?? o.tipo)}</td>
                 <td>{o.fiscalNome}</td>
                 <td>{o.bairro}</td>
                 <td>
@@ -589,7 +635,27 @@ export function PainelPage() {
             ))}
           </tbody>
         </table>
-      </div>
+      </details>
+
+      <details className="card details-card">
+        <summary>Fiscais ({kpis.fiscais.length})</summary>
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            {kpis.fiscais.map((f) => (
+              <tr key={f.id}>
+                <td>{f.nome}</td>
+                <td>{f.id}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
     </>
   );
 }

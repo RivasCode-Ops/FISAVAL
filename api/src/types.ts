@@ -1,6 +1,16 @@
+export type FinalidadeVistoria = 'IPTU' | 'ITBI' | 'OBRA' | 'DENUNCIA' | 'RECADASTRAMENTO';
+export type ResultadoConferencia = 'de_acordo' | 'divergente' | 'parcial';
+
 export type UserRole = 'fiscal' | 'gestor' | 'admin';
 export type Prioridade = 'alta' | 'media' | 'baixa';
 export type DemandaStatus = 'aberta' | 'os_gerada' | 'concluida';
+
+export type StatusPrazo =
+  | 'NO_PRAZO'
+  | 'A_VENCER'
+  | 'VENCIDA'
+  | 'APLICADA_NO_PRAZO'
+  | 'APLICADA_EM_ATRASO';
 export type AssinaturaModo = 'canvas' | 'icp' | 'govbr';
 
 export type OsStatus =
@@ -28,9 +38,13 @@ export interface Demanda {
   id: string;
   tenantId?: string;
   tipo: string;
+  finalidade?: FinalidadeVistoria;
+  dadosReferencia?: Record<string, string>;
   bairro: string;
   prioridade: Prioridade;
   prazo: string;
+  prazoVistoriaEm?: string;
+  dataInicioExecucaoEm?: string;
   status: DemandaStatus;
   inscricao?: string;
   endereco?: string;
@@ -49,8 +63,11 @@ export interface OrdemServico {
   endereco: string;
   bairro: string;
   tipo?: string;
+  finalidade?: FinalidadeVistoria;
+  dadosReferencia?: Record<string, string>;
   prioridade?: Prioridade;
   prazo?: string;
+  prazoCampoEm?: string;
   /** Janela de visita (HH:mm local). */
   visitaInicio?: string;
   visitaFim?: string;
@@ -67,10 +84,13 @@ export interface Vistoria {
   osId: string;
   checklist: Record<string, boolean>;
   divergencia: boolean;
+  resultadoConferencia?: ResultadoConferencia;
+  observacaoConferencia?: string;
   justificativa?: string;
   checkInLat?: number;
   checkInLng?: number;
   checkInAt?: string;
+  checkInAccuracyM?: number;
   concluidaAt?: string;
   assinaturaAt?: string;
   assinaturaNome?: string;
@@ -89,6 +109,7 @@ export interface VistoriaFoto {
   mime: string;
   sizeBytes: number;
   createdAt: string;
+  legenda?: string;
 }
 
 export interface DbShape {

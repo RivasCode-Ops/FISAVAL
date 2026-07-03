@@ -8,7 +8,8 @@
     "build": "vite build",
     "build:pages": "vite build --base=/FISAVAL/",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview --port 5193 --strictPort"
+    "preview": "vite preview --port 5193 --strictPort",
+    "preview:lan": "vite preview --host --port 5193 --strictPort"
   },
   "dependencies": {
     "dexie": "^4.0.11",

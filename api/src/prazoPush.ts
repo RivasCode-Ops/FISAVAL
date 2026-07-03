@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { config } from './config.js';
-import { listarPrazoVencidoNoTenant, aggregateAlertasPrazoCrossTenant } from './alertasPrazo.js';
+import { listarAlertasPrazoNoTenant, aggregateAlertasPrazoCrossTenant } from './alertasPrazo.js';
 import {
   isPushEnabled,
   notifyPrazoVencidoGestores,
@@ -27,17 +27,20 @@ export async function maybeNotifyPrazoTenant(force = false): Promise<{
   if (!isPushEnabled() || !config.alertaPushEnabled) {
     return { sent: false, count: 0 };
   }
-  const ordens = await listarPrazoVencidoNoTenant();
-  if (ordens.length < config.alertaPrazoMin) {
-    return { sent: false, count: ordens.length };
+  const alertas = await listarAlertasPrazoNoTenant();
+  const count = alertas.ordens.length + alertas.demandas.length;
+  if (count < config.alertaPrazoMin) {
+    return { sent: false, count };
   }
   const path = throttlePath();
-  if (isPrazoNotifyThrottled(path, ordens.length, force)) {
-    return { sent: false, count: ordens.length, throttled: true };
+  if (isPrazoNotifyThrottled(path, count, force)) {
+    return { sent: false, count, throttled: true };
   }
-  await notifyPrazoVencidoGestores(ordens.length, ordens[0]?.id, ordens[0]?.endereco);
-  saveThrottleState(path, ordens.length);
-  return { sent: true, count: ordens.length };
+  const hint = alertas.demandas[0]?.id ?? alertas.ordens[0]?.id;
+  const endereco = alertas.ordens[0]?.endereco ?? alertas.demandas[0]?.bairro;
+  await notifyPrazoVencidoGestores(count, hint, endereco);
+  saveThrottleState(path, count);
+  return { sent: true, count };
 }
 
 export async function maybeNotifySuperPrazo(force = false): Promise<{
@@ -49,17 +52,20 @@ export async function maybeNotifySuperPrazo(force = false): Promise<{
     return { sent: false, total: 0 };
   }
   const agg = await aggregateAlertasPrazoCrossTenant();
-  if (agg.total < config.alertaPrazoMin) {
-    return { sent: false, total: agg.total };
+  const total = agg.total + agg.totalDemandas;
+  if (total < config.alertaPrazoMin) {
+    return { sent: false, total };
   }
   const path = superThrottlePath();
-  if (isPrazoNotifyThrottled(path, agg.total, force)) {
-    return { sent: false, total: agg.total, throttled: true };
+  if (isPrazoNotifyThrottled(path, total, force)) {
+    return { sent: false, total, throttled: true };
   }
-  const resumo = agg.tenants.map((t) => `${t.municipio}: ${t.count}`).join('; ');
-  await notifySuperAdminPrazoVencido(agg.total, agg.tenantsEmAlerta, resumo);
-  saveThrottleState(path, agg.total);
-  return { sent: true, total: agg.total };
+  const resumo = agg.tenants
+    .map((t) => `${t.municipio}: ${t.count} (${t.demandas.length} dem., ${t.ordens.length} OS)`)
+    .join('; ');
+  await notifySuperAdminPrazoVencido(total, agg.tenantsEmAlerta, resumo);
+  saveThrottleState(path, total);
+  return { sent: true, total };
 }
 
 export async function runPrazoPushCycle(force = false): Promise<void> {

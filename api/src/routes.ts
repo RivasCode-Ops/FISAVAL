@@ -21,7 +21,14 @@ import { tenantUploadsDir } from './tenantPaths.js';
 import { getRepo } from './repo.js';
 import { uid } from './jsonRepo.js';
 import type { AuthPayload } from './auth.js';
-import type { Demanda, OrdemServico, OsStatus, Prioridade, Vistoria } from './types.js';
+import type {
+  Demanda,
+  FinalidadeVistoria,
+  OrdemServico,
+  OsStatus,
+  Prioridade,
+  Vistoria,
+} from './types.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
@@ -114,6 +121,8 @@ export function createRoutes(): Router {
     asyncHandler(async (req, res) => {
       const input = req.body as {
         tipo: string;
+        finalidade?: FinalidadeVistoria;
+        dadosReferencia?: Record<string, string>;
         bairro: string;
         prioridade: Prioridade;
         prazo: string;
@@ -333,6 +342,7 @@ export function createRoutes(): Router {
       const dir = join(tenantUploadsDir(), vistoriaId);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, filename), req.file.buffer);
+      const legenda = typeof req.body?.legenda === 'string' ? req.body.legenda.trim() : undefined;
       const foto = await getRepo().addFoto({
         id: fotoId,
         vistoriaId,
@@ -340,6 +350,7 @@ export function createRoutes(): Router {
         mime: req.file.mimetype,
         sizeBytes: req.file.size,
         createdAt: new Date().toISOString(),
+        ...(legenda ? { legenda } : {}),
       });
       res.status(201).json(foto);
     }),
@@ -521,12 +532,14 @@ export function createRoutes(): Router {
     '/alertas/prazo-vencido',
     requireRoles('gestor', 'admin'),
     asyncHandler(async (_req, res) => {
-      const { listarPrazoVencidoNoTenant } = await import('./alertasPrazo.js');
-      const ordens = await listarPrazoVencidoNoTenant();
+      const { listarAlertasPrazoNoTenant } = await import('./alertasPrazo.js');
+      const alertas = await listarAlertasPrazoNoTenant();
       res.json({
-        count: ordens.length,
-        ordens,
-        generatedAt: new Date().toISOString(),
+        count: alertas.ordens.length,
+        countDemandas: alertas.demandas.length,
+        demandas: alertas.demandas,
+        ordens: alertas.ordens,
+        generatedAt: alertas.generatedAt,
       });
     }),
   );
@@ -604,7 +617,7 @@ export function createRoutes(): Router {
 
   router.patch(
     '/fiscais/:id/tipos-habilitados',
-    requireRoles('gestor', 'admin'),
+    requireRoles('admin'),
     asyncHandler(async (req, res) => {
       const { tiposHabilitados } = req.body as { tiposHabilitados?: unknown };
       const { sanitizeTiposHabilitados, TIPOS_VISTORIA_PADRAO } = await import('./tipoVistoria.js');
@@ -735,7 +748,7 @@ export function createRoutes(): Router {
 
   router.get(
     '/audit',
-    requireRoles('gestor', 'admin'),
+    requireRoles('admin'),
     asyncHandler(async (req, res) => {
       const limit = Math.min(Number(req.query.limit) || 200, 500);
       res.json(listAudit(limit));
@@ -744,7 +757,7 @@ export function createRoutes(): Router {
 
   router.post(
     '/import/demandas',
-    requireRoles('gestor', 'admin'),
+    requireRoles('admin'),
     upload.single('file'),
     asyncHandler(async (req, res) => {
       if (!req.file) {

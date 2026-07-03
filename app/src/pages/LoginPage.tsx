@@ -4,6 +4,7 @@ import { getApiUrl, isApiMode } from '@/api/config';
 import { getStoredTenantId, setStoredTenantId } from '@/api/tenantStorage';
 import { useApiHealth } from '@/hooks/useApiHealth';
 import { useAuthStore } from '@/store/authStore';
+import { homePathForRole } from '@/lib/roleLabels';
 import { setRuntimeTenantId } from '@/lib/tenantFilter';
 
 type TenantOption = { id: string; municipio: string };
@@ -48,16 +49,15 @@ export function LoginPage() {
       return;
     }
     const session = useAuthStore.getState().session;
-    if (session?.role === 'fiscal') navigate('/campo');
-    else navigate('/painel');
+    if (session) navigate(homePathForRole(session.role));
   }
 
   return (
     <div className="login-page">
       <div className="login-box card">
-        <h1 style={{ marginTop: 0 }}>FISAVAL</h1>
-        <p style={{ color: 'var(--muted)' }}>Fiscalização imobiliária municipal</p>
-        <form onSubmit={(e) => void onSubmit(e)}>
+        <h1 className="login-box__title">FISAVAL</h1>
+        <p className="muted">Fiscalização imobiliária municipal</p>
+        <form onSubmit={(e) => void onSubmit(e)} className="stack">
           {isApiMode() && (multiTenant || tenants.length > 1) && (
             <>
               <label>Prefeitura (tenant)</label>
@@ -80,12 +80,12 @@ export function LoginPage() {
             onChange={(e) => setSenha(e.target.value)}
             autoComplete="current-password"
           />
-          {erro && <p style={{ color: 'var(--danger)' }}>{erro}</p>}
-          <button type="submit" className="btn" style={{ width: '100%', marginTop: '0.5rem' }}>
+          {erro && <p className="text-danger">{erro}</p>}
+          <button type="submit" className="btn btn-block">
             Entrar
           </button>
         </form>
-        <div className="login-hint">
+        <div className="login-hint stack stack--sm">
           {isApiMode() && (
             <p>
               <strong>Modo servidor</strong> — {getApiUrl()}
@@ -100,10 +100,13 @@ export function LoginPage() {
             </p>
           )}
           <p>
-            <strong>gestor@demo</strong> / demo123 — Painel e demandas
+            <strong>gestor@demo</strong> / demo123 — <strong>Coordenador</strong> (Painel e Demandas)
           </p>
           <p>
-            <strong>fiscal@demo</strong> / demo123 — PWA de campo
+            <strong>fiscal@demo</strong> / demo123 — <strong>Agente de campo</strong> (Campo)
+          </p>
+          <p>
+            <strong>admin@demo</strong> / demo123 — <strong>Administrador</strong> (+ Auditoria e Administração)
           </p>
         </div>
       </div>
